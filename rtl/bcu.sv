@@ -22,7 +22,7 @@ module bcu (
             3'b111: cond_met = (rs1 >= rs2);
             default: cond_met = 1'b0;
         endcase
-        
+
         take_br = is_jmp | (is_br & cond_met);
     end
 

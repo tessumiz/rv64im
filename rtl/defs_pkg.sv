@@ -1,4 +1,4 @@
-package riscv_pkg;
+package defs_pkg;
 
     localparam logic [4:0]
         OP_LD   = 5'b00000,
@@ -28,5 +28,16 @@ package riscv_pkg;
         F7_0 = 7'b0000000,
         F7_1 = 7'b0000001,
         F7_2 = 7'b0100000;
+
+    typedef struct packed {
+        logic alu_src1_pc;
+        logic alu_src2_imm;
+        logic is_word_op;
+        logic br;
+        logic jmp;
+        logic mem_r;
+        logic mem_w;
+        logic wb;
+    } ctrl_t;
 
 endpackage
