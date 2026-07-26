@@ -2,7 +2,7 @@ module dmem(
     input  logic        clk,
     input  logic [31:0] addr,
     input  logic [63:0] wdata,
-    input  logic [1:0]  w_width,
+    input  logic [1:0]  f3_2,
     input  logic        r_en,
     input  logic        w_en,
     output logic [63:0] rdata
@@ -15,7 +15,7 @@ module dmem(
     always_comb begin
         if (w_en) begin
             // assumes addr is aligned
-            unique case (w_width)
+            unique case (f3_2)
                 2'b00: w_msk = 8'b1111_1111;
                 2'b01: w_msk = 8'b0000_0001 << addr[2:0];
                 2'b10: w_msk = 8'b0000_0011 << {addr[2:1], 1'b0};
@@ -25,7 +25,7 @@ module dmem(
             w_msk = 8'b0;
         end
 
-        rdata = r_en ? mem[addr[11:2]] : 64'b0;  // resolution deferred to main pipeline
+        rdata = r_en ? mem[addr[12:3]] : 64'b0;
     end
 
     always_ff @(posedge clk) begin
