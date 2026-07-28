@@ -2,7 +2,7 @@ module alu(
     input  logic [63:0] a,
     input  logic [63:0] b,
     input  logic [3:0]  alu_op,
-    input  logic        is_word_op,
+    input  logic        is_wd_op,
     output logic [63:0] alu_out
 );
     logic [63:0] sum;
@@ -48,7 +48,7 @@ module alu(
         rev = (alu_op[2:0] == 3'b001);
         sra = (alu_op == 4'b1101);
 
-        shamt = is_word_op ? {1'b0, b[4:0]} : b[5:0];
+        shamt = is_wd_op ? {1'b0, b[4:0]} : b[5:0];
 
         x = rev ? {<<{a}} : a;
         sr_out = sra ? $signed(x) >>> shamt : x >> shamt;
@@ -67,7 +67,7 @@ module alu(
             3'b111: res = a & b;
         endcase
 
-        if (is_word_op) begin
+        if (is_wd_op) begin
             alu_out = {{32{res[31]}}, res[31:0]};
         end else begin
             alu_out = res;

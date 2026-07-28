@@ -29,15 +29,61 @@ package defs_pkg;
         F7_1 = 7'b0000001,
         F7_2 = 7'b0100000;
 
+
+
     typedef struct packed {
         logic alu_src1_pc;
         logic alu_src2_imm;
-        logic is_word_op;
+        logic is_wd_op;
         logic br;
         logic jmp;
         logic mem_r;
         logic mem_w;
         logic wb;
     } ctrl_t;
+
+
+    typedef struct packed {
+        logic [63:0] pc;
+        logic [63:0] ins;
+    } if_id_t;
+
+
+    typedef struct packed {
+        ctrl_t       ctrl;
+        logic [63:0] rs1;
+        logic [63:0] rs2;
+        logic [4:0]  rd;
+        logic [4:0]  rs1_a;
+        logic [4:0]  rs2_a;
+        logic [63:0] imm;
+        logic [63:0] pc;
+        logic [2:0]  f3;
+        logic [6:0]  f7;
+    } id_ex_stage_t;
+
+
+    typedef struct packed {
+        logic [63:0] ex_res;
+        logic [63:0] rs2;
+        logic [4:0]  rd;
+        logic [2:0]  f3;
+        ctrl_t       ctrl;
+    } ex_mem_t;
+
+
+    typedef struct packed {
+        logic [4:0]  rd;
+        logic [63:0] data;
+        ctrl_t       ctrl;
+    } mem_wb_t;
+
+
+    typedef struct packed {
+        logic mem_fwd_rs1,
+        logic mem_fwd_rs2,
+        logic wb_fwd_rs1,
+        logic wb_fwd_rs2,
+    } fwd_sig_t;
 
 endpackage
