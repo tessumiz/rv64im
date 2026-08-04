@@ -33,10 +33,13 @@ module mem_stage (
 
         out.pc   = ex_mem.pc;
         out.data = ex_mem.ctrl.mem_r ? r_data : ex_mem.ex_res;
+        out.csr_new_data = ex_mem.rs2;
         out.rd   = ex_mem.rd;
         out.ctrl = ex_mem.ctrl;
+        out.exc  = ex_mem.exc;
+        out.csr_addr = ex_mem.csr_w_addr;
 
-        wb       = !ex_mem.ctrl.mem_r;
+        wb       = ex_mem.ctrl.wb;
         wb_rd    = ex_mem.rd;
         fwd_data = out.data;
     end

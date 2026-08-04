@@ -4,14 +4,15 @@ module decode (
     input logic clk,
 
     wb_if.slave wb_bus,
+    csr_rw_if.r_master csr_bus,
 
     input  if_id_t if_id,
-    output logic   has_rs1,
-    output logic   has_rs2,
-    output logic   has_rd,
 
     output id_ex_t out
 );
+
+    logic        illegal_ins;
+    logic [63:0] illegal_cause;
 
     decoder u_decoder (
         .ins   (if_id.ins),
@@ -23,12 +24,11 @@ module decode (
         .f7    (out.f7),
         .ctrl  (out.ctrl),
 
-        .has_rs1 (has_rs1),
-        .has_rs2 (has_rs2),
-
-        .exc    (out.exc.valid),
-        .mcause (out.exc.cause)
+        .exc    (illegal_ins),
+        .mcause (illegal_cause)
     );
+
+    logic [63:0] rs2;
 
     regfile u_reg (
         .clk     (clk),
@@ -39,7 +39,7 @@ module decode (
         .wb_en   (wb_bus.valid),
 
         .rs1     (out.rs1),
-        .rs2     (out.rs2)
+        .rs2     (rs2)
     );
 
     immgen u_immgen (
@@ -47,8 +47,22 @@ module decode (
         .imm (out.imm)
     );
 
+    logic illegal_csr_w, is_csr;
 
-    assign out.pc  = if_id.pc;
-    assign has_rd   = out.ctrl.wb;
+    always_comb begin
+        is_csr = out.ctrl.is_csr;
+
+        csr_bus.r_en   = is_csr;
+        csr_bus.r_addr = out.imm[11:0];
+
+        illegal_csr_w = (out.imm[11:10] == CSR_ADDR_RO) && out.ctrl.csr_we;
+
+        out.pc  = if_id.pc;
+        out.rs2 = out.ctrl.is_csr ? csr_bus.r_data : rs2;
+
+        out.exc.valid = (is_csr && csr_bus.r_exc) || illegal_ins || illegal_csr_w;
+        out.exc.cause = (is_csr && (csr_bus.r_exc || illegal_csr_w)) ? 2 :
+                        (illegal_ins ? illegal_cause : 0);
+    end
 
 endmodule

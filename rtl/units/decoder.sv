@@ -8,8 +8,6 @@ module decoder (
     output logic [4:0]  rd,
     output logic [2:0]  f3,
     output logic [6:0]  f7,
-    output logic        has_rs1,
-    output logic        has_rs2,
 
     output ctrl_t       ctrl,
     output logic        exc,
@@ -19,30 +17,33 @@ module decoder (
     logic [4:0]  op;
     logic [11:0] sys_imm;
 
-    logic csr_r;
-    logic csr_w;
+    logic has_rs1, has_rs2;
+    logic csr_w_op;
 
 
     always_comb begin
         op      = ins[6:2];
-        rd      = ins[11:7];
         f3      = ins[14:12];
-        rs1_a   = ins[19:15];
-        rs2_a   = ins[24:20];
         f7      = ins[31:25];
         sys_imm = ins[31:20];
+
+        rd      = ctrl.wb ? ins[11:7]  : 0;
+        rs1_a   = has_rs1 ? ins[19:15] : 0;
+        rs2_a   = has_rs2 ? ins[24:20] : 0;
 
         has_rs1 =  0;
         has_rs2 =  0;
         ctrl    = '0;
         exc     =  0;
         mcause  =  0;
+        csr_w_op = 0;
 
 
         case (op)
             OP_LUI: begin
                 ctrl.alu_src2_imm = 1;
                 ctrl.wb           = 1;
+                ctrl.is_lui       = 1;
             end
 
             OP_AU: begin
@@ -110,8 +111,12 @@ module decoder (
 
             OP_SYS: begin
                 if (f3 != PRIV) begin
-                    ctrl.is_csr = 1;
+                    ctrl.is_csr  = 1;
+                    ctrl.is_zimm = f3[2];
                     has_rs1 = !f3[2];
+
+                    csr_w_op    = (f3[1:0] == CSR_RW);
+                    ctrl.csr_we = (csr_w_op || (!csr_w_op && rs1_a != 0));
 
                 end else begin
                     exc = 1;

@@ -1,3 +1,4 @@
 .vscode
 rtl/obj_dir
-rtl/verible.filelist
+files.f
+slang-linux.tar.gz

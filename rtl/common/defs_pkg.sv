@@ -51,7 +51,8 @@ package defs_pkg;
     localparam logic [1:0]
         CSR_RW = 2'b01,
         CSR_RS = 2'b10,
-        CSR_RC = 2'b11;
+        CSR_RC = 2'b11,
+        CSR_ADDR_RO = 2'b11;
 
 
     typedef struct packed {
@@ -60,6 +61,7 @@ package defs_pkg;
         logic is_imul;
         logic is_idiv;
         logic is_wd_op;
+        logic is_lui;
         logic br;
         logic jmp;
         logic mem_r;
@@ -67,15 +69,22 @@ package defs_pkg;
         logic wb;
 
         logic is_csr;
+        logic csr_we;
+        logic is_zimm;
         logic is_mret;
     } ctrl_t;
-
 
     typedef struct packed {
         logic valid;
         logic [63:0] cause;
         logic [63:0] tval;
     } exc_t;
+
+    typedef struct packed {
+        logic ext_int;
+        logic timer_int;
+        logic soft_int;
+    } irq_t;
 
 
     typedef struct packed {
@@ -87,13 +96,14 @@ package defs_pkg;
     typedef struct packed {
         logic [63:0] pc;
         logic [63:0] rs1;
-        logic [63:0] rs2;
+        logic [63:0] rs2;  // or csr_r_data
         logic [4:0]  rd;
         logic [4:0]  rs1_a;
         logic [4:0]  rs2_a;
         logic [63:0] imm;
         logic [2:0]  f3;
         logic [6:0]  f7;
+
         ctrl_t ctrl;
         exc_t  exc;
     } id_ex_t;
@@ -101,10 +111,14 @@ package defs_pkg;
 
     typedef struct packed {
         logic [63:0] pc;
-        logic [63:0] ex_res;
-        logic [63:0] rs2;
+        logic [63:0] ex_res; // or csr_new_data
+        logic [63:0] rs2;  // or csr_addr
+        logic [11:0] csr_w_addr;
         logic [4:0]  rd;
+        logic [4:0]  rs1_a;
+        logic [4:0]  rs2_a;
         logic [2:0]  f3;
+
         ctrl_t ctrl;
         exc_t  exc;
     } ex_mem_t;
@@ -113,7 +127,12 @@ package defs_pkg;
     typedef struct packed {
         logic [63:0] pc;
         logic [4:0]  rd;
-        logic [63:0] data;
+        logic [4:0]  rs1_a;
+        logic [4:0]  rs2_a;
+        logic [63:0] data; // or csr_old_data
+        logic [63:0] csr_new_data;
+        logic [11:0] csr_addr;
+
         ctrl_t ctrl;
         exc_t  exc;
     } mem_wb_t;

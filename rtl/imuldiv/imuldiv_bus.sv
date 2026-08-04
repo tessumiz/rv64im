@@ -35,15 +35,16 @@ interface imuldiv_out_if;
     logic [63:0] result;
     logic [4:0]  rd;
     logic        clr_pending_mem_flg;
-    logic        arbiter_ready;
+    logic        stall;
+    logic        flush;
 
     modport master (
-        output valid, result, rd,
-        input clr_pending_mem_flg, arbiter_ready
+        output valid, result, rd, flush,
+        input clr_pending_mem_flg, stall
     );
 
     modport slave (
-        input  valid, result, rd,
-        output clr_pending_mem_flg, arbiter_ready
+        input  valid, result, rd, flush,
+        output clr_pending_mem_flg, stall
     );
 endinterface

@@ -11,6 +11,13 @@ module wb_arbiter (
     // more likely to create dependency bubbles... mul is pipelined; most tolerable.
 
     always_comb begin
+        imul_out.stall = 1;
+        idiv_out.stall = 1;
+
+        out.valid = 0;
+        out.rd    = 0;
+        out.data  = 0;
+
         if (wb_out.valid) begin
             out.valid = 1;
             out.rd    = wb_out.rd;
@@ -20,16 +27,15 @@ module wb_arbiter (
             out.valid = 1;
             out.rd    = imul_out.rd;
             out.data  = imul_out.result;
+
+            imul_out.stall = 0;
         end
         else if (idiv_out.valid) begin
             out.valid = 1;
             out.rd    = idiv_out.rd;
             out.data  = idiv_out.result;
-        end
-        else begin
-            out.valid = 0;
-            out.rd    = 0;
-            out.data  = 0;
+
+            idiv_out.stall = 0;
         end
     end
 endmodule

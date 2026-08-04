@@ -5,7 +5,9 @@ module pipeline(
     input logic rst,
 
     imem_if.master imem_bus,
-    dmem_if.master dmem_bus
+    dmem_if.master dmem_bus,
+
+    input irq_t irq
 );
 
     if_id_t  if_id_d,  if_id_q;
@@ -15,6 +17,8 @@ module pipeline(
 
     logic        take_br;
     logic [63:0] br_targ;
+    logic        take_trap_br;
+    logic [63:0] trap_targ;
 
     fwd_sig_t    fwd_sig;
     logic [63:0] rs1_fwd;
@@ -30,14 +34,12 @@ module pipeline(
 
     logic ld_use_haz;
     logic imuldiv_haz;
-    logic has_rs1;
-    logic has_rs2;
-    logic has_rd;
 
     logic if_id_stall, if_id_flush;
     logic id_ex_stall, id_ex_flush;
     logic ex_mem_stall, ex_mem_flush;
     logic mem_wb_stall, mem_wb_flush;
+    logic wb_flush_all;
 
     // unused for now...
     assign mem_wb_stall = 0;
@@ -50,6 +52,9 @@ module pipeline(
 
     wb_if wb_stage_out();
     wb_if wb_bus();
+
+    csr_rw_if   u_csr_rw_bus();
+    csr_trap_if u_csr_trap_bus();
 
 
     gen_reg #(.T(if_id_t)) u_if_id_reg (
@@ -87,11 +92,14 @@ module pipeline(
 
     fetch u_fetch (
         .clk      (clk),
+        .rst      (rst),
         .stall    (if_id_stall),
         .flush    (if_id_flush),
 
         .take_br  (take_br),
         .br_targ  (br_targ),
+        .take_trap_br (take_trap_br),
+        .trap_targ    (trap_targ),
         .imem_bus (imem_bus),
 
         .out      (if_id_d)
@@ -103,9 +111,8 @@ module pipeline(
         .wb_bus   (wb_bus),
         .if_id    (if_id_q),
 
-        .has_rs1  (has_rs1),
-        .has_rs2  (has_rs2),
-        .has_rd   (has_rd),
+        .csr_bus  (u_csr_rw_bus.r_master),
+
         .out      (id_ex_d)
     );
 
@@ -115,8 +122,9 @@ module pipeline(
         .fwd_sig  (fwd_sig),
         .rs1_fwd  (rs1_fwd),
         .rs2_fwd  (rs2_fwd),
-        .fwd_mem  (mem_fwd_data),
-        .fwd_wb   (wb_fwd_data),
+
+        .fwd_mem   (mem_fwd_data),
+        .fwd_wb    (wb_fwd_data),
 
         .take_br  (take_br),
         .br_targ  (br_targ),
@@ -137,12 +145,19 @@ module pipeline(
         .mem_wb   (mem_wb_q),
         .wb_bus   (wb_stage_out),
 
+        .csr_w_bus (u_csr_rw_bus.w_master),
+        .trap_bus  (u_csr_trap_bus.exc_master),
+
         .wb       (fwd_wb),
         .rd       (wb_fwd_rd),
-        .fwd_data (wb_fwd_data)
+        .fwd_data (wb_fwd_data),
+        .take_br  (take_trap_br),
+        .trap_pc  (trap_targ),
+        .flush_all (wb_flush_all)
     );
 
 
+    // IMULDIV
     imuldiv_in_if imuldiv_in();
     logic is_imul, is_idiv;
 
@@ -183,9 +198,11 @@ module pipeline(
     );
 
 
+
+    // FWD / HAZ
     fwd u_fwd (
-        .id_ex_rs1_a (id_ex_q.rs1_a),
-        .id_ex_rs2_a (id_ex_q.rs2_a),
+        .rs1_a (id_ex_q.rs1_a),
+        .rs2_a (id_ex_q.rs2_a),
 
         .ex_mem_wb   (fwd_mem),
         .ex_mem_rd   (mem_fwd_rd),
@@ -200,8 +217,6 @@ module pipeline(
         .id_ex_mem_r (id_ex_q.ctrl.mem_r),
         .id_ex_rd    (id_ex_q.rd),
 
-        .has_rs1     (has_rs1),
-        .has_rs2     (has_rs2),
         .rs1_a       (id_ex_d.rs1_a),
         .rs2_a       (id_ex_d.rs2_a),
 
@@ -217,9 +232,6 @@ module pipeline(
         .rd    (id_ex_d.rd),
         .if_id_stall (if_id_stall),
 
-        .has_rs1    (has_rs1),
-        .has_rs2    (has_rs2),
-        .has_rd     (has_rd),
         .is_imuldiv (id_ex_d.ctrl.is_imul || id_ex_d.ctrl.is_idiv),
 
         .wb_en      (wb_bus.valid),
@@ -229,6 +241,7 @@ module pipeline(
     );
 
 
+    // flush / stall
     logic imuldiv_bkpres;
 
     always_comb begin
@@ -239,9 +252,21 @@ module pipeline(
         id_ex_stall  = ld_use_haz || imuldiv_haz || imuldiv_bkpres || dmem_bus.busy;
         ex_mem_stall = dmem_bus.busy;
 
-        if_id_flush  = take_br;
-        id_ex_flush  = take_br || ld_use_haz || imuldiv_haz;
-        ex_mem_flush = take_br || id_ex_d.ctrl.is_imul || id_ex_d.ctrl.is_idiv;
-        mem_wb_flush = dmem_bus.busy;
+        if_id_flush  = wb_flush_all || take_br || take_trap_br;
+        id_ex_flush  = if_id_flush || ld_use_haz || imuldiv_haz;
+
+        ex_mem_flush = wb_flush_all || id_ex_q.ctrl.is_imul || id_ex_q.ctrl.is_idiv;
+        mem_wb_flush = wb_flush_all || dmem_bus.busy;
     end
+
+
+    // ZICSR
+    csr_file u_csr_file (
+        .clk         (clk),
+        .rst         (rst),
+
+        .csr_rw_bus  (u_csr_rw_bus.slave),
+        .csr_trap_bus(u_csr_trap_bus.slave)
+    );
+
 endmodule
