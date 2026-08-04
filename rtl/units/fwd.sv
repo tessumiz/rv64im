@@ -1,3 +1,6 @@
+import defs_pkg::*;
+
+
 module fwd(
     input logic [4:0] id_ex_rs1_a,
     input logic [4:0] id_ex_rs2_a,
@@ -11,24 +14,27 @@ module fwd(
     output fwd_sig_t fwd_sig
 );
 
-    logic mem_fwd = ex_mem_wb && (ex_mem_rd != 5'b0);
-    logic wb_fwd  = mem_wb_wb && (wb_a != 5'b0);
+    logic mem_fwd;
+    logic wb_fwd;
 
     always_comb begin
+        mem_fwd = ex_mem_wb && (ex_mem_rd != 5'b0);
+        wb_fwd  = mem_wb_wb && (mem_wb_rd != 5'b0);
+
         fwd_sig.mem_fwd_rs1 = 0;
         fwd_sig.wb_fwd_rs1  = 0;
         fwd_sig.mem_fwd_rs2 = 0;
         fwd_sig.wb_fwd_rs2  = 0;
 
-        if (mem_fwd && ex_mem_rd == id_ex_rs1) begin
+        if (mem_fwd && ex_mem_rd == id_ex_rs1_a) begin
             fwd_sig.mem_fwd_rs1 = 1;
-        end else if (wb_fwd && wb_a == id_ex_rs1) begin
+        end else if (wb_fwd && mem_wb_rd == id_ex_rs1_a) begin
             fwd_sig.wb_fwd_rs1 = 1;
         end
 
-        if (mem_fwd && ex_mem_rd == id_ex_rs2) begin
+        if (mem_fwd && ex_mem_rd == id_ex_rs2_a) begin
             fwd_sig.mem_fwd_rs2 = 1;
-        end else if (wb_fwd && wb_a == id_ex_rs2) begin
+        end else if (wb_fwd && mem_wb_rd == id_ex_rs2_a) begin
             fwd_sig.wb_fwd_rs2 = 1;
         end
     end

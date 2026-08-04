@@ -8,7 +8,7 @@ module gen_reg #(
     input  T    d,
     output T    q
 );
-    
+
     always_ff @(posedge clk) begin
         if (clr) begin
             q <= 0;

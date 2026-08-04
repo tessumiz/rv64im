@@ -1,12 +1,8 @@
 import defs_pkg::*;
 
 module execute (
-    input logic  clk,
-    input logic  stall,
-    input logic  flush,
-
     input id_ex_t id_ex,
-  
+
     input fwd_sig_t    fwd_sig,
     input logic [63:0] fwd_mem,
     input logic [63:0] fwd_wb,
@@ -14,15 +10,12 @@ module execute (
     output logic        take_br,
     output logic [63:0] br_targ,
 
+    output logic [63:0] rs1_fwd,
+    output logic [63:0] rs2_fwd,
     output ex_mem_t out
 );
-    logic [63:0] rs1_fwd;
-    logic [63:0] rs2_fwd;
-
     logic [63:0] alu_in1, alu_in2, alu_out;
     logic [3:0]  alu_op;
-
-    ex_mem_t ex_mem;
 
     always_comb begin
         rs1_fwd = (fwd_sig.mem_fwd_rs1) ? fwd_mem : (fwd_sig.wb_fwd_rs1 ? fwd_wb : id_ex.rs1);
@@ -53,19 +46,13 @@ module execute (
         .take_br (take_br)
     );
 
-    assign ex_mem.ex_res = id_ex.ctrl.jmp ? (id_ex.pc + 4) : alu_out;;
-    assign ex_mem.rs2    = rs2_fwd;
-    assign ex_mem.rd     = id_ex.rd;
-    assign ex_mem.f3     = id_ex.f3;
-    assign ex_mem.ctrl   = id_ex.ctrl;
-
-    pipe_reg #(.T(ex_mem_t))
-    u_ex_mem (
-        .clk (clk),
-        .en  (~stall),
-        .clr (flush),
-        .d   (ex_mem),
-        .q   (out)
-    );
+    always_comb begin
+        out.pc     = id_ex.pc;
+        out.ex_res = id_ex.ctrl.jmp ? (id_ex.pc + 4) : alu_out;
+        out.rs2    = rs2_fwd;
+        out.rd     = id_ex.rd;
+        out.f3     = id_ex.f3;
+        out.ctrl   = id_ex.ctrl;
+    end
 
 endmodule

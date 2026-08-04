@@ -10,9 +10,9 @@ module writeback (
     output logic [63:0] fwd_data
 );
 
-    assign wb_bus.data = mem_wb.data;
-    assign wb_bus.rd   = mem_wb.rd;
-    assign wb_bus.en   = mem_wb.ctrl.wb;
+    assign wb_bus.data  = mem_wb.data;
+    assign wb_bus.rd    = mem_wb.rd;
+    assign wb_bus.valid = mem_wb.ctrl.wb;
 
     assign wb       = mem_wb.ctrl.wb;
     assign rd       = mem_wb.rd;

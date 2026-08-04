@@ -42,6 +42,7 @@ module alu(
         logic rev;
         logic sra;
         logic [63:0] x;
+        logic [63:0] x_ext;
         logic [63:0] sr_out;
         logic [5:0]  shamt;
 
@@ -51,7 +52,14 @@ module alu(
         shamt = is_wd_op ? {1'b0, b[4:0]} : b[5:0];
 
         x = rev ? {<<{a}} : a;
-        sr_out = sra ? $signed(x) >>> shamt : x >> shamt;
+        x_ext = is_wd_op ? {{32{x[31]}}, x[31:0]} : x;
+
+        if (sra) begin
+            sr_out = unsigned'($signed(x_ext) >>> shamt);
+        end else begin
+            sr_out = x_ext << shamt;
+        end
+
         shft_out = rev ? {<<{sr_out}} : sr_out;
     end
 

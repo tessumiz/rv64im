@@ -8,7 +8,7 @@ module fetch (
 
     input logic        take_br,
     input logic [63:0] br_targ,
-    
+
     imem_if.master imem_bus,
 
     output if_id_t out
@@ -35,12 +35,5 @@ module fetch (
         .q    (pc)
     );
 
-    gen_reg #(.T(if_id_t))
-    u_if_id (
-        .clk   (clk),
-        .en    (~stall),
-        .clr   (flush),
-        .d     (if_id),
-        .q     (out)
-    );
+    assign out = if_id;
 endmodule
