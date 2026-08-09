@@ -1,6 +1,6 @@
 module wb_arbiter (
-    imuldiv_out_if.slave imul_out,
-    imuldiv_out_if.slave idiv_out,
+    muldiv_out_if.slave mul_out,
+    muldiv_out_if.slave div_out,
     wb_if.slave wb_out,
 
     wb_if.master out
@@ -11,8 +11,8 @@ module wb_arbiter (
     // more likely to create dependency bubbles... mul is pipelined; most tolerable.
 
     always_comb begin
-        imul_out.stall = 1;
-        idiv_out.stall = 1;
+        mul_out.stall = 1;
+        div_out.stall = 1;
 
         out.valid = 0;
         out.rd    = 0;
@@ -23,19 +23,19 @@ module wb_arbiter (
             out.rd    = wb_out.rd;
             out.data  = wb_out.data;
         end
-        else if (imul_out.valid) begin
+        else if (mul_out.commit_ready) begin
             out.valid = 1;
-            out.rd    = imul_out.rd;
-            out.data  = imul_out.result;
+            out.rd    = mul_out.rd;
+            out.data  = mul_out.result;
 
-            imul_out.stall = 0;
+            mul_out.stall = 0;
         end
-        else if (idiv_out.valid) begin
+        else if (div_out.commit_ready) begin
             out.valid = 1;
-            out.rd    = idiv_out.rd;
-            out.data  = idiv_out.result;
+            out.rd    = div_out.rd;
+            out.data  = div_out.result;
 
-            idiv_out.stall = 0;
+            div_out.stall = 0;
         end
     end
 endmodule

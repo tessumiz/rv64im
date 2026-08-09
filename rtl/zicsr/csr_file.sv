@@ -1,9 +1,28 @@
+import defs_pkg::*;
+import zicsr_pkg::*;
+
+
 module csr_file(
     input logic clk,
     input logic rst,
 
-    csr_rw_if.slave   csr_rw_bus,
-    csr_trap_if.slave csr_trap_bus
+    input irq_t irq,
+
+    csr_rw_if.slave   rw_bus,
+    csr_trap_if.slave trap_bus,
+
+    output logic [63:0] mepc_out,
+    output logic [63:0] mtvec_out,
+
+    output logic [63:0] stvec_out,
+    output logic [63:0] sepc_out,
+
+    output logic        take_mepc,
+    output logic        take_mtvec,
+    output logic        take_sepc,
+    output logic        take_stvec,
+
+    output logic [1:0]  priv
 );
 
     logic [63:0] mstatus;
@@ -11,32 +30,153 @@ module csr_file(
     logic [63:0] mepc;
     logic [63:0] mcause;
     logic [63:0] mtval;
+    logic [63:0] mscratch;
 
-    localparam MSTATUS_MIE  = 3;
-    localparam MSTATUS_MPIE = 7;
+    logic [63:0] stvec;
+    logic [63:0] sepc;
+    logic [63:0] scause;
+    logic [63:0] stval;
+    logic [63:0] sscratch;
 
     logic [63:0] mie;
-    logic [63:0] mip;
+    logic [63:0] mip;  // hardwired; pseudo-ff...
+    logic [63:0] medeleg;
+    logic [63:0] mideleg;
+
+    logic [1:0]   priv_lvl;
+    assign priv = priv_lvl;
 
 
-    logic [63:0] r_data;
-
+    // SOFTWARE RW
     always_comb begin
-        case (csr_rw_bus.r_addr)
-            12'h300: r_data = mstatus;
-            12'h305: r_data = mtvec;
-            12'h341: r_data = mepc;
-            12'h342: r_data = mcause;
-            12'h343: r_data = mtval;
+        case (rw_bus.r_addr)
+            CSR_MSTATUS:  rw_bus.r_data = mstatus;
+            CSR_MTVEC:    rw_bus.r_data = mtvec;
+            CSR_MEPC:     rw_bus.r_data = mepc;
+            CSR_MCAUSE:   rw_bus.r_data = mcause;
+            CSR_MTVAL:    rw_bus.r_data = mtval;
+            CSR_MSCRATCH: rw_bus.r_data = mscratch;
 
-            default: r_data = '0;
+            CSR_SSTATUS:  rw_bus.r_data = mstatus & MSTATUS_S_MASK;
+            CSR_SEPC:     rw_bus.r_data = sepc;
+            CSR_STVEC:    rw_bus.r_data = stvec;
+            CSR_SCAUSE:   rw_bus.r_data = scause;
+            CSR_STVAL:    rw_bus.r_data = stval;
+            CSR_SSCRATCH: rw_bus.r_data = sscratch;
+
+            CSR_MIE:      rw_bus.r_data = mie;
+            CSR_MIP:      rw_bus.r_data = mip;
+            CSR_MEDELEG:  rw_bus.r_data = medeleg;
+            CSR_MIDELEG:  rw_bus.r_data = mideleg;
+
+            default: rw_bus.r_data = '0;
         endcase
 
-        csr_rw_bus.r_data = r_data;
+        mepc_out  = mepc;
+        sepc_out  = sepc;
     end
 
-    assign csr_trap_bus.mtvec = mtvec;
-    assign csr_trap_bus.mepc  = mepc;
+
+
+    // INTERRUPTS
+    logic [63:0] irq_act;
+    logic [63:0] irq_cause;
+
+    // metastability prevention; not guaranteed, but reduces chance...
+    irq_t irq_ff1;
+    irq_t irq_ff2;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            irq_ff1 <= '0;
+            irq_ff2 <= '0;
+        end
+        else begin
+            irq_ff1 <= irq;
+            irq_ff2 <= irq_ff1;
+        end
+    end
+
+    always_comb begin
+        mip = 0;
+        mip[EXT_INT] = irq_ff2.ext_int;
+        mip[TMR_INT] = irq_ff2.tmr_int;
+        mip[SFT_INT] = irq_ff2.sft_int;
+
+        irq_act = (mie & mip);
+
+        irq_cause =
+        {
+            1'b1,
+            63'(
+                irq_act[EXT_INT] ? EXT_INT :
+                irq_act[SFT_INT] ? SFT_INT :
+                irq_act[TMR_INT] ? TMR_INT :
+                63'b0
+            )
+        };
+    end
+
+
+    // TRAPS
+    logic [63:0] cause;
+
+    always_comb begin
+        trap_bus.irq_pending = |irq_act & mstatus[MSTATUS_MIE];
+
+        cause = trap_bus.take_exc ? trap_bus.cause :
+                trap_bus.take_irq ? irq_cause : 0;
+    end
+
+
+    logic  deleg, trap;
+    assign deleg =
+        (priv_lvl < PRIV_M) && (
+        (trap_bus.take_exc  && medeleg[cause]) ||
+        (trap_bus.take_irq  && mideleg[cause])
+    );
+
+    assign trap = trap_bus.take_exc | trap_bus.take_irq;
+
+    // can't place this inside the always_ff below...
+    always_comb begin
+        take_mtvec = 0;
+        take_mepc  = 0;
+        take_stvec = 0;
+        take_sepc  = 0;
+
+        if (trap) begin
+            if (deleg) take_stvec = 1;
+            else       take_mtvec = 1;
+        end
+        else if (trap_bus.take_mret) begin
+            take_mepc = 1;
+        end
+        else if (trap_bus.take_sret) begin
+            take_sepc = 1;
+        end
+    end
+
+    // direct/vec mode tvec calc
+    logic [61:0] m_base, s_base;
+    logic [62:0] bare_cause;
+
+    always_comb begin
+        m_base = mtvec[63:2];
+        s_base = stvec[63:2];
+        
+        bare_cause = cause[62:0];
+
+        mtvec_out =
+            (mtvec[1:0] == VEC_MODE && trap_bus.take_irq) ?
+            {m_base, 2'b00} + ({1'b0, bare_cause} << 2) :
+            {m_base, 2'b00};
+        
+        stvec_out =
+            (stvec[1:0] == VEC_MODE && trap_bus.take_irq) ?
+            {s_base, 2'b00} + ({1'b0, bare_cause} << 2) :
+            {s_base, 2'b00};
+    end
 
 
     always_ff @(posedge clk) begin
@@ -46,22 +186,76 @@ module csr_file(
             mepc    <= 0;
             mcause  <= 0;
             mtval   <= 0;
+            mie     <= 0;
+
+            sepc    <= 0;
+            stvec   <= 0;
+
+            priv_lvl <= PRIV_M;
         end
         else begin
-            if (csr_rw_bus.w_en) begin
-                unique case (csr_rw_bus.w_addr)  // check's done in id, hence exhaustive
-                    12'h300: mstatus <= csr_rw_bus.w_data;
-                    12'h305: mtvec   <= csr_rw_bus.w_data;
-                    12'h341: mepc    <= csr_rw_bus.w_data;
-                    12'h342: mcause  <= csr_rw_bus.w_data;
-                    12'h343: mtval   <= csr_rw_bus.w_data;
+            if (rw_bus.w_en) begin
+                // can't be deferred to another always_ff.....
+                unique case (rw_bus.w_addr)  // check's done in id, hence exhaustive
+                    CSR_MSTATUS:  mstatus <= rw_bus.w_data;
+                    CSR_MTVEC:    mtvec   <= rw_bus.w_data;
+                    CSR_MEPC:     mepc    <= rw_bus.w_data;
+                    CSR_MCAUSE:   mcause  <= rw_bus.w_data;
+                    CSR_MTVAL:    mtval   <= rw_bus.w_data;
+                    CSR_MIE:      mie     <= rw_bus.w_data;
+                    CSR_MSCRATCH: mscratch <= rw_bus.w_data;
+
+                    CSR_SSTATUS:  mstatus <= (rw_bus.w_data & MSTATUS_S_MASK) |
+                                            (mstatus & ~MSTATUS_S_MASK);
+
+                    CSR_SEPC:     sepc    <= rw_bus.w_data;
+                    CSR_STVEC:    stvec   <= rw_bus.w_data;
+                    CSR_SCAUSE:   scause  <= rw_bus.w_data;
+                    CSR_STVAL:    stval   <= rw_bus.w_data;
+                    CSR_SSCRATCH: sscratch <= rw_bus.w_data;
+
+                    CSR_MEDELEG:  medeleg <= rw_bus.w_data;
+                    CSR_MIDELEG:  mideleg <= rw_bus.w_data;
                 endcase
             end
 
-            if (csr_trap_bus.is_exc) begin
-                mstatus[MSTATUS_MPIE] <= mstatus[MSTATUS_MIE];
-                mepc          <= csr_trap_bus.pc;
-                mcause        <= csr_trap_bus.cause;
+            if (trap) begin
+                if (!deleg) begin
+                    mstatus[MSTATUS_MPP -: 2]  <= priv_lvl;
+                    priv_lvl <= PRIV_M;
+
+                    mstatus[MSTATUS_MPIE] <= mstatus[MSTATUS_MIE];
+                    mstatus[MSTATUS_MIE]  <= 0;
+
+                    mepc   <= trap_bus.pc;
+                    mcause <= cause;
+                    mtval  <= trap_bus.take_exc ? trap_bus.tval : 0;
+                end
+                else begin
+                    mstatus[MSTATUS_SPP] <= priv_lvl[0];
+                    priv_lvl <= PRIV_S;
+
+                    mstatus[MSTATUS_SPIE] <= mstatus[MSTATUS_SIE];
+                    mstatus[MSTATUS_SIE]  <= 0;
+
+                    sepc   <= trap_bus.pc;
+                    scause <= cause;
+                    stval  <= trap_bus.take_exc ? trap_bus.tval : 0;
+                end
+            end
+            else if (trap_bus.take_mret) begin
+                priv_lvl <= mstatus[MSTATUS_MPP -: 2];
+                mstatus[MSTATUS_MPP -: 2] <= PRIV_U;  // specs demand this; failsafe for buggy kernels...
+
+                mstatus[MSTATUS_MIE]  <= mstatus[MSTATUS_MPIE];
+                mstatus[MSTATUS_MPIE] <= 1;
+            end
+            else if (trap_bus.take_sret) begin
+                priv_lvl <= {1'b0, mstatus[MSTATUS_SPP]};
+                mstatus[MSTATUS_SPP] <= 0;  // specs again...
+
+                mstatus[MSTATUS_SIE]  <= mstatus[MSTATUS_SPIE];
+                mstatus[MSTATUS_SPIE] <= 1;
             end
         end
     end

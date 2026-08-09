@@ -25,41 +25,28 @@ package defs_pkg;
         XOR=3'b100, SRL=3'b101, OR =3'b110, AND=3'b111,
 
         MUL=3'b000, MULH=3'b001, MULHSU=3'b010, MULHU=3'b011,
-        DIV=3'b100, DIVU=3'b101, REM=3'b110, REMU=3'b111,
+        DIV=3'b100, DIVU=3'b101, REM=3'b110, REMU=3'b111;
 
-        PRIV=3'b000, CSRRW=3'b001, CSRRS=3'b010, CSRRC=3'b011,
-        CSRRWI=3'b101, CSRRSI=3'b110, CSRRCI=3'b111;
 
     localparam logic [6:0]
         F7_0 = 7'b0000000,
         F7_1 = 7'b0000001,
         F7_2 = 7'b0100000;
 
-    
-    localparam logic [11:0]
-        ECALL = 12'h000,
-        EBRK  = 12'h001,
-        MRET  = 12'h302;
-
-    localparam logic [11:0] 
-        CSR_MSTATUS   = 12'h300,
-        CSR_MTVEC     = 12'h305,
-        CSR_MCAUSE    = 12'h342,
-        CSR_MEPC      = 12'h341,
-        CSR_MTVAL     = 12'h343;
-
     localparam logic [1:0]
-        CSR_RW = 2'b01,
-        CSR_RS = 2'b10,
-        CSR_RC = 2'b11,
-        CSR_ADDR_RO = 2'b11;
+        MEM_BYTE = 2'b00,
+        MEM_HWORD = 2'b01,
+        MEM_WORD = 2'b10,
+        MEM_DWORD = 2'b11;
 
 
     typedef struct packed {
+        logic valid;
+
         logic alu_src1_pc;
         logic alu_src2_imm;
-        logic is_imul;
-        logic is_idiv;
+        logic is_mul;
+        logic is_div;
         logic is_wd_op;
         logic is_lui;
         logic br;
@@ -71,25 +58,30 @@ package defs_pkg;
         logic is_csr;
         logic csr_we;
         logic is_zimm;
-        logic is_mret;
     } ctrl_t;
 
     typedef struct packed {
         logic valid;
+
+        logic is_mret;
+        logic is_sret;
+
         logic [63:0] cause;
         logic [63:0] tval;
     } exc_t;
 
     typedef struct packed {
         logic ext_int;
-        logic timer_int;
-        logic soft_int;
+        logic tmr_int;
+        logic sft_int;
     } irq_t;
 
 
     typedef struct packed {
         logic [63:0] pc;
         logic [31:0] ins;
+
+        exc_t exc;
     } if_id_t;
 
 

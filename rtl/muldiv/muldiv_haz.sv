@@ -1,6 +1,6 @@
 // flush and mem fault exception behaviour pending...
 
-module imuldiv_haz (
+module muldiv_haz (
     input logic clk,
     input logic rst,
 
@@ -10,11 +10,11 @@ module imuldiv_haz (
 
     input logic if_id_stall,
 
-    input logic is_imuldiv,
+    input logic is_muldiv,
     input logic wb_en,
     input logic [4:0] wb_rd,
 
-    output logic imuldiv_haz
+    output logic muldiv_haz
 );
 
     typedef enum logic [1:0] {
@@ -38,11 +38,11 @@ module imuldiv_haz (
         has_rd    = (rd    != 0);
         has_wb_rd = (wb_rd != 0);
 
-        rs1_raw = has_rs1 && (rsrv[rs1_a] != NONE) && (is_imuldiv || rsrv[rs1_a] == IMULDIV);
-        rs2_raw = has_rs2 && (rsrv[rs2_a] != NONE) && (is_imuldiv || rsrv[rs2_a] == IMULDIV);
-        rd_waw  = has_rd  && (rsrv[rd]    != NONE) && (is_imuldiv || rsrv[rd]    == IMULDIV);
+        rs1_raw = has_rs1 && (rsrv[rs1_a] != NONE) && (is_muldiv || rsrv[rs1_a] == IMULDIV);
+        rs2_raw = has_rs2 && (rsrv[rs2_a] != NONE) && (is_muldiv || rsrv[rs2_a] == IMULDIV);
+        rd_waw  = has_rd  && (rsrv[rd]    != NONE) && (is_muldiv || rsrv[rd]    == IMULDIV);
 
-        imuldiv_haz = rs1_raw || rs2_raw || rd_waw;
+        muldiv_haz = rs1_raw || rs2_raw || rd_waw;
     end
 
     always_ff @(posedge clk) begin
@@ -55,7 +55,7 @@ module imuldiv_haz (
         end
         else begin
             if (!if_id_stall && has_rd) begin
-                rsrv[rd] <= is_imuldiv ? IMULDIV : MAIN_PIPE;
+                rsrv[rd] <= is_muldiv ? IMULDIV : MAIN_PIPE;
             end
 
             if (wb_en && has_wb_rd && !(!if_id_stall && has_rd && (wb_rd == rd))) begin

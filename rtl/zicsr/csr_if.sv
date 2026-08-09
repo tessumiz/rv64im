@@ -29,21 +29,22 @@ endinterface
 interface csr_trap_if;
     logic [63:0] pc;
     logic [63:0] cause;
-    logic [63:0] mtvec;
-    logic [63:0] mepc;
+    logic [63:0] tval;
 
-    logic is_exc;
-    logic is_mret;
+    logic take_exc;
+    logic take_irq;
+    logic take_mret;
+    logic take_sret;
 
-    irq_t irq;
+    logic irq_pending;
 
     modport master (
-        output is_exc, is_mret, cause, pc, irq,
-        input  mtvec, mepc
+        output take_exc, take_irq, take_mret, take_sret, cause, pc, tval,
+        input  irq_pending
     );
 
     modport slave (
-        input  is_exc, is_mret, cause, pc, irq,
-        output mtvec, mepc
+        input  take_exc, take_irq, take_mret, take_sret, cause, pc, tval,
+        output irq_pending
     );
 endinterface

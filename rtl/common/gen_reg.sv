@@ -11,7 +11,7 @@ module gen_reg #(
 
     always_ff @(posedge clk) begin
         if (clr) begin
-            q <= 0;
+            q <= 0;  // for pipe_regs, unsets valid to 0
         end
         else if (en) begin
             q <= d;

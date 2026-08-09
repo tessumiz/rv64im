@@ -1,16 +1,18 @@
 interface imem_if;
     logic [63:0] addr;
-    logic        r_en;
     logic [31:0] data;
+
+    logic        r_en;
+    logic        busy;
 
     modport master (
         output addr, r_en,
-        input data
+        input data, busy
     );
 
     modport slave (
         input addr, r_en,
-        output data
+        output data, busy
     );
 endinterface
 

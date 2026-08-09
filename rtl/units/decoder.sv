@@ -1,7 +1,10 @@
 import defs_pkg::*;
+import zicsr_pkg::*;
+
 
 module decoder (
     input  logic [31:0] ins,
+    input  logic [1:0]  priv,
 
     output logic [4:0]  rs1_a,
     output logic [4:0]  rs2_a,
@@ -10,8 +13,7 @@ module decoder (
     output logic [6:0]  f7,
 
     output ctrl_t       ctrl,
-    output logic        exc,
-    output logic [63:0] mcause
+    output exc_t        exc
 );
 
     logic [4:0]  op;
@@ -33,9 +35,11 @@ module decoder (
 
         has_rs1 =  0;
         has_rs2 =  0;
-        ctrl    = '0;
-        exc     =  0;
-        mcause  =  0;
+
+        ctrl = '0;
+        ctrl.valid = 1;
+
+        exc = '0;
         csr_w_op = 0;
 
 
@@ -119,26 +123,36 @@ module decoder (
                     ctrl.csr_we = (csr_w_op || (!csr_w_op && rs1_a != 0));
 
                 end else begin
-                    exc = 1;
+                    exc.valid = 1;
 
                     case (sys_imm)
-                        ECALL: mcause = 11;
-                        EBRK : mcause = 3;
-
-                        MRET : begin
-                            exc    = 0;
-                            mcause = 0;
-                            ctrl.is_mret = 1;
+                        ECALL: begin
+                            unique case (priv)
+                                PRIV_U:  exc.cause = EXC_ECALL_U;
+                                PRIV_S:  exc.cause = EXC_ECALL_S;
+                                PRIV_M:  exc.cause = EXC_ECALL_M;
+                            endcase
                         end
 
-                        default: mcause = 2;
+                        MRET : begin
+                            exc.valid   = (priv < PRIV_M);
+                            exc.is_mret = (priv == PRIV_M);
+                        end
+
+                        SRET : begin
+                            // M mode is allowed to exec sret, acc to specs...
+                            exc.valid   = (priv < PRIV_S);
+                            exc.is_sret = (priv >= PRIV_S);
+                        end
+
+                        default: exc.cause = EXC_ILLEGAL_INSTR;
                     endcase
                 end
             end
 
             default: begin
-                exc = 1;
-                mcause = 2;
+                exc.valid = 1;
+                exc.cause = EXC_ILLEGAL_INSTR;
             end
         endcase
     end

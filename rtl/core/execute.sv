@@ -1,4 +1,6 @@
 import defs_pkg::*;
+import zicsr_pkg::*;
+
 
 module execute (
     input id_ex_t id_ex,
@@ -64,8 +66,6 @@ module execute (
 
         out.csr_w_addr = id_ex.imm[11:0];
 
-        out.pc     = id_ex.pc;
-
         if (id_ex.ctrl.jmp) begin
             out.ex_res = id_ex.pc + 4;
         end
@@ -79,6 +79,7 @@ module execute (
             out.ex_res = alu_out;
         end
 
+        out.pc     = id_ex.pc;
         out.rs2    = id_ex.ctrl.is_csr ? csr_w_data : rs2_fwd;
         out.rd     = id_ex.rd;
         out.rs1_a  = id_ex.rs1_a;

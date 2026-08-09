@@ -1,5 +1,5 @@
 ./rtl/common/*
-./rtl/imuldiv/*
+./rtl/muldiv/*
 ./rtl/units/*
 ./rtl/zicsr/*
 ./rtl/mem/*

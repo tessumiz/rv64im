@@ -1,3 +1,6 @@
+import defs_pkg::*;
+
+
 module dmem(
     input logic clk,
     dmem_if.slave bus
@@ -12,10 +15,10 @@ module dmem(
     always_comb begin
         if (bus.w_en) begin
             unique case (bus.f3_2)
-                2'b00: w_msk = 8'b0000_0001 << bus.addr[2:0];
-                2'b01: w_msk = 8'b0000_0011 << {bus.addr[2:1], 1'b0};
-                2'b10: w_msk = 8'b0000_1111 << {bus.addr[2], 2'b00};
-                2'b11: w_msk = 8'b1111_1111;
+                MEM_BYTE: w_msk = 8'b0000_0001 << bus.addr[2:0];
+                MEM_HWORD: w_msk = 8'b0000_0011 << {bus.addr[2:1], 1'b0};
+                MEM_WORD: w_msk = 8'b0000_1111 << {bus.addr[2], 2'b00};
+                MEM_DWORD: w_msk = 8'b1111_1111;
             endcase
         end else begin
             w_msk = 0;
