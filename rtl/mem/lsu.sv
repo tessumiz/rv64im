@@ -1,12 +1,31 @@
-module ld_sto_fmt (
+import defs_pkg::*;
+
+module lsu (
+    input  logic        mem_op,
+
     input  logic [2:0]  f3,
     input  logic [63:0] addr,
     input  logic [63:0] w_data_raw,
     input  logic [63:0] r_data_raw,
 
     output logic [63:0] w_data_fmt,
-    output logic [63:0] r_data_fmt
+    output logic [63:0] r_data_fmt,
+    output logic        is_misaligned
 );
+
+    always_comb begin
+        if (!mem_op) begin
+            is_misaligned = 0;
+        end
+        else begin
+            unique case (f3[1:0])
+                MEM_BYTE:  is_misaligned = (addr[0] != 0);
+                MEM_HWORD: is_misaligned = (addr[1:0] != 0);
+                MEM_WORD:  is_misaligned = (addr[2:0] != 0);
+                MEM_DWORD: is_misaligned = 0;
+            endcase
+        end
+    end
 
     always_comb begin
         unique case (f3[1:0])

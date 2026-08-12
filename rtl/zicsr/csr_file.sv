@@ -22,7 +22,8 @@ module csr_file(
     output logic        take_sepc,
     output logic        take_stvec,
 
-    output logic [1:0]  priv
+    output logic [1:0]  priv,
+    output logic [63:0] satp_out
 );
 
     logic [63:0] mstatus;
@@ -44,7 +45,10 @@ module csr_file(
     logic [63:0] mideleg;
 
     logic [1:0]   priv_lvl;
-    assign priv = priv_lvl;
+    logic [63:0]  satp;
+
+    assign priv     = priv_lvl;
+    assign satp_out = satp;
 
 
     // SOFTWARE RW
@@ -68,6 +72,8 @@ module csr_file(
             CSR_MIP:      rw_bus.r_data = mip;
             CSR_MEDELEG:  rw_bus.r_data = medeleg;
             CSR_MIDELEG:  rw_bus.r_data = mideleg;
+
+            CSR_SATP:     rw_bus.r_data = satp;
 
             default: rw_bus.r_data = '0;
         endcase
@@ -197,25 +203,27 @@ module csr_file(
             if (rw_bus.w_en) begin
                 // can't be deferred to another always_ff.....
                 unique case (rw_bus.w_addr)  // check's done in id, hence exhaustive
-                    CSR_MSTATUS:  mstatus <= rw_bus.w_data;
-                    CSR_MTVEC:    mtvec   <= rw_bus.w_data;
-                    CSR_MEPC:     mepc    <= rw_bus.w_data;
-                    CSR_MCAUSE:   mcause  <= rw_bus.w_data;
-                    CSR_MTVAL:    mtval   <= rw_bus.w_data;
-                    CSR_MIE:      mie     <= rw_bus.w_data;
+                    CSR_MSTATUS:  mstatus  <= rw_bus.w_data;
+                    CSR_MTVEC:    mtvec    <= rw_bus.w_data;
+                    CSR_MEPC:     mepc     <= rw_bus.w_data;
+                    CSR_MCAUSE:   mcause   <= rw_bus.w_data;
+                    CSR_MTVAL:    mtval    <= rw_bus.w_data;
+                    CSR_MIE:      mie      <= rw_bus.w_data;
                     CSR_MSCRATCH: mscratch <= rw_bus.w_data;
 
-                    CSR_SSTATUS:  mstatus <= (rw_bus.w_data & MSTATUS_S_MASK) |
+                    CSR_SSTATUS:  mstatus  <= (rw_bus.w_data & MSTATUS_S_MASK) |
                                             (mstatus & ~MSTATUS_S_MASK);
 
-                    CSR_SEPC:     sepc    <= rw_bus.w_data;
-                    CSR_STVEC:    stvec   <= rw_bus.w_data;
-                    CSR_SCAUSE:   scause  <= rw_bus.w_data;
-                    CSR_STVAL:    stval   <= rw_bus.w_data;
+                    CSR_SEPC:     sepc     <= rw_bus.w_data;
+                    CSR_STVEC:    stvec    <= rw_bus.w_data;
+                    CSR_SCAUSE:   scause   <= rw_bus.w_data;
+                    CSR_STVAL:    stval    <= rw_bus.w_data;
                     CSR_SSCRATCH: sscratch <= rw_bus.w_data;
 
-                    CSR_MEDELEG:  medeleg <= rw_bus.w_data;
-                    CSR_MIDELEG:  mideleg <= rw_bus.w_data;
+                    CSR_MEDELEG:  medeleg  <= rw_bus.w_data;
+                    CSR_MIDELEG:  mideleg  <= rw_bus.w_data;
+
+                    CSR_SATP:     satp     <= rw_bus.w_data;
                 endcase
             end
 

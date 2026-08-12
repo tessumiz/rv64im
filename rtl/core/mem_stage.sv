@@ -30,37 +30,25 @@ module mem_stage (
     logic  is_sret;
     logic  is_irq;
 
-    ctrl_t ctrl;
-    logic  valid;
     logic  safe;
 
-    always_comb begin
-        addr  = ex_mem.ex_res;
-        ctrl  = ex_mem.ctrl;
-        valid = ctrl.valid;  // not a bubble
+    assign addr  = ex_mem.ex_res;
 
-        is_misaligned = 0;
-
-        if (valid && (ctrl.mem_w || ctrl.mem_r)) begin
-            unique case (ex_mem.f3[1:0])
-                MEM_BYTE:  is_misaligned = (addr[0] != 0);
-                MEM_HWORD: is_misaligned = (addr[1:0] != 0);
-                MEM_WORD:  is_misaligned = (addr[2:0] != 0);
-                MEM_DWORD: is_misaligned = 0;
-            endcase
-        end
-    end
+    logic  mem_op;
+    assign mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;
 
 
-    ld_sto_fmt u_lsfmt (
+    lsu u_lsu (
+        .mem_op     (mem_op),
         .f3         (ex_mem.f3),
         .addr       (addr),
 
         .r_data_raw (dmem_bus.r_data),
         .r_data_fmt (r_data),
 
-        .w_data_raw (ex_mem.rs2),
-        .w_data_fmt (dmem_bus.w_data)
+        .w_data_raw    (ex_mem.rs2),
+        .w_data_fmt    (dmem_bus.w_data),
+        .is_misaligned (is_misaligned)
     );
 
 
@@ -78,7 +66,7 @@ module mem_stage (
         dmem_bus.f3_2 = ex_mem.f3[1:0];
         dmem_bus.w_en = ex_mem.ctrl.mem_w && safe;
         dmem_bus.r_en = ex_mem.ctrl.mem_r && safe;
-        dmem_bus.addr = addr;
+        dmem_bus.v_addr = addr;
 
         trap_bus.take_exc  = is_exc;
         trap_bus.take_mret = is_mret;

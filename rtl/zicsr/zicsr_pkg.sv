@@ -17,7 +17,9 @@ package zicsr_pkg;
         CSR_MIE       = 12'h304,
         CSR_MIP       = 12'h344,
         CSR_MIDELEG   = 12'h303,
-        CSR_MEDELEG   = 12'h302;
+        CSR_MEDELEG   = 12'h302,
+        
+        CSR_SATP      = 12'h180;
 
     localparam logic [1:0]
         PRIV   = 0,  // priv instr
@@ -52,9 +54,19 @@ package zicsr_pkg;
 
     localparam int unsigned
         EXC_ILLEGAL_INSTR = 2,
-        EXC_BREAKPOINT    = 3,
-        EXC_LOAD_MISALIGNED = 4,
+
+        EXC_INSTR_MISALIGNED = 0,
+        EXC_LOAD_MISALIGNED  = 4,
         EXC_STORE_MISALIGNED = 6,
+
+        EXC_INSTR_ACCESS_FAULT = 1,
+        EXC_LOAD_ACCESS_FAULT  = 5,
+        EXC_STORE_ACCESS_FAULT = 7,
+
+        EXC_INSTR_PAGE_FAULT = 12,
+        EXC_LOAD_PAGE_FAULT  = 13,
+        EXC_STORE_PAGE_FAULT = 15,
+
         EXC_ECALL_M = 11,
         EXC_ECALL_S = 9,
         EXC_ECALL_U = 8;
