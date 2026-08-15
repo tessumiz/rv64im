@@ -20,47 +20,86 @@ module set_cache #(
         logic dirty;
     } meta_t;
 
+
     line_t mem  [bus.SETS-1:0][7:0];
     meta_t meta [bus.SETS-1:0][7:0];
 
-
     line_t [7:0] cmp_in_line;
-    line_t [7:0] cmp_in_meta;
-
+    meta_t [7:0] cmp_in_meta;
     logic  [7:0] cmp_out;
+
+    line_t      hit_line;
+    logic [2:0] hit_way;
+    logic       hit, miss;
 
     set_cache_fsm_t state;
 
-    logic  mem_op, w_op;
-    assign w_op   = bus.w_en || bus.fill_en;
-    assign mem_op = bus.r_en || w_op;
+    logic  is_subword_w;
+    assign is_subword_w = !(&bus.w_mask);
 
 
-    // read fsm
+    // meta clear fsm
+    logic clr_in_prog;
+    int   curr_clr_addr;  // set idx...
+
+
+    // sigs for writes to cache
+    logic       norm_w;
+    logic       write;
+    logic [2:0] w_way;
+    DATA_T      w_data;
+    logic       w_dirty;
+    logic [bus.W_MASK_LEN-1:0] w_wmask;
+
+
+    // master fsm
     always_ff @(posedge clk) begin
         if (rst) begin
-            state <= IDLE;
-            meta  <= '0;
+            state         <= CACHE_IDLE;
+            clr_in_prog   <= 1;
+            curr_clr_addr <= 0;
+        end
+        else if (clr_in_prog) begin
+            clr_in_prog         <= (curr_clr_addr != bus.SETS - 1);
+            curr_clr_addr       <= curr_clr_addr + 1;
+            meta[curr_clr_addr] <= '0;
         end
         else begin
-           unique case (state)
-                IDLE : begin
-                    if (mem_op) begin
+            if (write) begin
+                meta[bus.set_idx][w_way].valid <= 1;
+                meta[bus.set_idx][w_way].dirty <= w_dirty;
+            end
+
+            unique case (state)
+                CACHE_IDLE : begin
+                    if (bus.r_en || bus.w_en) begin
                         state  <= TAG_CMP;
-                        cmp_in_line <= mem[bus.set_idx];
+                        cmp_in_line <= mem [bus.set_idx];
+                        cmp_in_meta <= meta[bus.set_idx];
                     end
                 end
 
                 TAG_CMP : begin
-                    if (bus.r_en)
-                        state <= bus.hit ? IDLE : REQ_FILL;
-                    else begin
-                        state <= (bus.w_width != $bits(DATA_T)) ? REQ_FILL : WRITE;
+                    if (bus.evict_wb)
+                        state <= EVICT;
+                    else if (bus.r_en)
+                        state <= hit ? CACHE_IDLE : REQ_FILL;
+                    else
+                        state <= (is_subword_w && miss) ? REQ_FILL : WRITE;
+                end
+
+                EVICT : begin
+                    if (bus.evict_complete) begin
+                        if (bus.r_en)
+                            state <= hit ? CACHE_IDLE : REQ_FILL;
+                        else
+                            state <= (is_subword_w && miss) ? REQ_FILL : WRITE;
                     end
                 end
 
                 REQ_FILL : begin
-                    state <= bus.r_en ? R_FILL : SUBWORD_W_FILL;
+                    if (bus.fill_en)
+                        state <= bus.r_en ? R_FILL : SUBWORD_W_FILL;
                 end
 
                 SUBWORD_W_FILL : begin
@@ -68,23 +107,16 @@ module set_cache #(
                 end
 
                 R_FILL, WRITE : begin
-                    state <= IDLE;
+                    state <= CACHE_IDLE;
                 end
             endcase
         end
     end
 
-    
-    // all combinatoric sigs
-    line_t hit_line;
-
-    logic [2:0] hit_way;
-
-    logic       miss;
 
     always_comb begin
-        cmp_in_meta = meta[bus.set_idx];
-
+        hit_way    = 0;
+        hit_line   = 0;
         cmp_out    = 0;
         bus.r_data = 0;
 
@@ -99,64 +131,102 @@ module set_cache #(
             end
 
         bus.hit = |cmp_out;
-        miss    = !bus.hit;
+        hit     = bus.hit;
+        miss    = !hit;
     end
 
 
     // WRITE
-    logic [2:0] victim_way;
+    logic [2:0] curr_victim_way;
+
+    // latched; since plru updates in the next cycle...
+    logic [2:0] victim_way_ff;
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            victim_way_ff <= 0;
+        end
+        else if (state == TAG_CMP) begin
+            victim_way_ff <= curr_victim_way;
+        end
+    end
+
 
     // LRU
-    tree_plru  #(.line_t(line_t), .meta_t(meta_t))
-    u_tree_plru (
+    tree_plru u_tree_plru (
         .clk        (clk),
         .rst        (rst),
 
         .state      (state),
-        .cmp_in_line(cmp_in_line),
-        .cmp_in_meta(cmp_in_meta),
         .hit_way    (hit_way),
 
         .bus        (bus),
 
-        .victim_way (victim_way)
+        .victim_way (curr_victim_way)
     );
 
 
-    line_t victim_line = cmp_in_line[victim_way];
-    meta_t victim_meta = cmp_in_meta[victim_way];
-
-    logic  write;
-    DATA_T w_data;
-    logic [2:0] w_way;
+    // solving the 1-cycle ff lag with fwd-ing
+    logic [2:0] victim_way;
+    line_t victim_line;
+    meta_t victim_meta;
 
     always_comb begin
-        bus.r_data = hit_line.data;
+        victim_way  = (state == TAG_CMP) ? curr_victim_way : victim_way_ff;
+        victim_line = cmp_in_line[victim_way];
+        victim_meta = cmp_in_meta[victim_way];
+
+
+        // fill_data must remain stable till ready fires
+        bus.r_data = hit ? hit_line.data : bus.fill_data;
 
         bus.fill_req =
             (state == TAG_CMP) && miss && (
-            (bus.r_en || (bus.w_en && (bus.w_width != $bits(DATA_T))))
+            (bus.r_en || (bus.w_en && is_subword_w))
         );
 
-        bus.evict_wb  = (state == TAG_CMP && miss && victim_meta.valid && victim_meta.dirty);
+        bus.evict_wb =
+            (state == TAG_CMP && miss && victim_meta.valid && victim_meta.dirty) ||
+            (state == EVICT);
+
         bus.evict_tag = victim_line.tag;
         bus.evicted_data = victim_line.data;
 
-        write = (state == R_FILL || state == SUBWORD_W_FILL || state == WRITE);
-        w_way   = (state == TAG_CMP && bus.hit) ? hit_way : victim_way;
+        norm_w =
+            (state == TAG_CMP && bus.w_en && !(miss && is_subword_w)) ||
+            (state == SUBWORD_W_FILL);
 
-        bus.ready = (state == R_FILL || state == WRITE);
+        write  = norm_w || (state == REQ_FILL && bus.fill_en);
+        w_way  = norm_w && hit ? hit_way : victim_way;
+
+
+        // hit write/subword-write (note that bus.w_en is already gated to logic 'write'...)
+        if (norm_w) begin
+            w_data  = bus.w_data;
+            w_wmask = bus.w_mask;
+            w_dirty = 1;
+        end
+        // miss fill; when (state == REQ_FILL && bus.fill_en)
+        else begin
+            w_data  = bus.fill_data;
+            w_wmask = '1;
+            w_dirty =  0;
+        end
+
+        bus.ready = ((state == TAG_CMP && bus.r_en) || state == R_FILL || state == WRITE);
     end
 
     always_ff @(posedge clk) begin
-        if (!rst) begin
-            if (write) begin
-                mem [bus.set_idx][w_way].tag   <= bus.tag;
-                meta[bus.set_idx][w_way].valid <= 1;
-                meta[bus.set_idx][w_way].dirty <= victim_meta.valid;
+        if (!rst && write) begin
+            mem [bus.set_idx][w_way].tag   <= bus.tag;
+            
+            // # moved upwards...
+            // meta[bus.set_idx][w_way].valid <= 1;
+            // meta[bus.set_idx][w_way].dirty <= w_dirty;
 
-                // masking needs to be done here
-                mem[bus.set_idx][w_way].data   <= w_data;
+            for (int i = 0; i < bus.W_MASK_LEN; i++) begin
+                if (w_wmask[i])
+                    mem[bus.set_idx][w_way].data[8*i +: 8] <= w_data[8*i +: 8];
             end
         end
     end

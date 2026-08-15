@@ -47,13 +47,14 @@ interface dmem_if;
 endinterface
 
 
-// set assoc
+// set assoc cache
 interface set_cache_if #(
     parameter type TAG_T,
     parameter type DATA_T,
     parameter int  SETS
 );
-    localparam int IDX_W = $clog2(SETS);
+    localparam int IDX_W  = $clog2(SETS);
+    localparam int W_MASK_LEN = $bits(DATA_T) / 8;
 
     logic  [IDX_W-1:0] set_idx;
     TAG_T  tag;
@@ -64,12 +65,13 @@ interface set_cache_if #(
     logic  w_en;
     DATA_T w_data;
 
-    logic [$bits(DATA_T)-1:0]     w_mask;
-    logic [$clog2($bits(DATA_T))] w_width;
+    // byte-mask
+    logic [W_MASK_LEN-1:0] w_mask;
 
     logic  evict_wb;
     TAG_T  evict_tag;
     DATA_T evicted_data;
+    logic  evict_complete;
 
     logic  fill_en;
     DATA_T fill_data;  // at req_master's set_idx
@@ -79,12 +81,37 @@ interface set_cache_if #(
     logic  ready;
 
     modport req (
-        output set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, w_width,
+        output set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
         input  r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req
     );
 
     modport slave(
-        input  set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, w_width,
+        input  set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
         output r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req
+    );
+endinterface
+
+
+// ptw
+interface dram_if;
+    logic [55:0] addr;
+
+    logic        r_en;
+    logic [63:0] r_data;
+
+    logic        w_en;
+    logic [63:0] w_data;
+
+    logic        ready;
+    logic        access_fault;
+
+    modport master (
+        output addr, r_en, w_en, w_data,
+        input  r_data, ready, access_fault
+    );
+
+    modport slave (
+        input  addr, r_en, w_en, w_data,
+        output r_data, ready, access_fault
     );
 endinterface

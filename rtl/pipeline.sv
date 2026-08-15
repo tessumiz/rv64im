@@ -44,6 +44,7 @@ module pipeline(
     logic [63:0] wb_fwd_data;
 
     logic [1:0]  priv;
+    logic [63:0] satp;
 
 
     logic ld_use_haz;
@@ -251,7 +252,8 @@ module pipeline(
         .take_sepc  (take_sepc),
         .take_stvec (take_stvec),
 
-        .priv      (priv)
+        .priv      (priv),
+        .satp_out  (satp)
     );
 
 

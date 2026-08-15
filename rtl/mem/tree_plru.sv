@@ -1,16 +1,10 @@
 import mem_pkg::*;
 
-module tree_plru #(
-    parameter type line_t,
-    parameter type meta_t
-)(
+module tree_plru(
     input logic clk,
     input logic rst,
 
-    input line_t cmp_in_line,
-    input meta_t cmp_in_meta,
-    input [2:0]  hit_way,
-
+    input [2:0] hit_way,
     set_cache_fsm_t state,
 
     set_cache_if.slave bus,
@@ -43,7 +37,7 @@ module tree_plru #(
         accessed_way = bus.hit ? hit_way : victim_way;
         nxt_plru = curr_plru;
 
-        if (bus.hit || bus.fill_en) begin
+        if (bus.hit || bus.fill_req) begin
             nxt_plru[0] = ~accessed_way[2];
 
             if (accessed_way[2] == 0)

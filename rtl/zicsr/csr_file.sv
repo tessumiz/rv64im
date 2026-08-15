@@ -22,8 +22,9 @@ module csr_file(
     output logic        take_sepc,
     output logic        take_stvec,
 
-    output logic [1:0]  priv,
-    output logic [63:0] satp_out
+    output logic [1:0] priv,
+    output satp_t      satp_out
+
 );
 
     logic [63:0] mstatus;
@@ -44,42 +45,46 @@ module csr_file(
     logic [63:0] medeleg;
     logic [63:0] mideleg;
 
-    logic [1:0]   priv_lvl;
-    logic [63:0]  satp;
+    logic [1:0]  priv_lvl;
+    satp_t       satp;
 
     assign priv     = priv_lvl;
     assign satp_out = satp;
 
 
     // SOFTWARE RW
+    logic [63:0] r_data;
+
     always_comb begin
         case (rw_bus.r_addr)
-            CSR_MSTATUS:  rw_bus.r_data = mstatus;
-            CSR_MTVEC:    rw_bus.r_data = mtvec;
-            CSR_MEPC:     rw_bus.r_data = mepc;
-            CSR_MCAUSE:   rw_bus.r_data = mcause;
-            CSR_MTVAL:    rw_bus.r_data = mtval;
-            CSR_MSCRATCH: rw_bus.r_data = mscratch;
+            CSR_MSTATUS:  r_data = mstatus;
+            CSR_MTVEC:    r_data = mtvec;
+            CSR_MEPC:     r_data = mepc;
+            CSR_MCAUSE:   r_data = mcause;
+            CSR_MTVAL:    r_data = mtval;
+            CSR_MSCRATCH: r_data = mscratch;
 
-            CSR_SSTATUS:  rw_bus.r_data = mstatus & MSTATUS_S_MASK;
-            CSR_SEPC:     rw_bus.r_data = sepc;
-            CSR_STVEC:    rw_bus.r_data = stvec;
-            CSR_SCAUSE:   rw_bus.r_data = scause;
-            CSR_STVAL:    rw_bus.r_data = stval;
-            CSR_SSCRATCH: rw_bus.r_data = sscratch;
+            CSR_SSTATUS:  r_data = mstatus & MSTATUS_S_MASK;
+            CSR_SEPC:     r_data = sepc;
+            CSR_STVEC:    r_data = stvec;
+            CSR_SCAUSE:   r_data = scause;
+            CSR_STVAL:    r_data = stval;
+            CSR_SSCRATCH: r_data = sscratch;
 
-            CSR_MIE:      rw_bus.r_data = mie;
-            CSR_MIP:      rw_bus.r_data = mip;
-            CSR_MEDELEG:  rw_bus.r_data = medeleg;
-            CSR_MIDELEG:  rw_bus.r_data = mideleg;
+            CSR_MIE:      r_data = mie;
+            CSR_MIP:      r_data = mip;
+            CSR_MEDELEG:  r_data = medeleg;
+            CSR_MIDELEG:  r_data = mideleg;
 
-            CSR_SATP:     rw_bus.r_data = satp;
+            CSR_SATP:     r_data = satp;
 
-            default: rw_bus.r_data = '0;
+            default: r_data = '0;
         endcase
 
         mepc_out  = mepc;
         sepc_out  = sepc;
+
+        rw_bus.r_data = r_data;
     end
 
 
@@ -184,6 +189,12 @@ module csr_file(
             {s_base, 2'b00};
     end
 
+    logic [63:0] w_data;
+    logic [3:0]  w_data_satp_mode;
+
+    assign w_data = rw_bus.w_data;
+    assign w_data_satp_mode = w_data[63:60];
+
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -203,33 +214,36 @@ module csr_file(
             if (rw_bus.w_en) begin
                 // can't be deferred to another always_ff.....
                 unique case (rw_bus.w_addr)  // check's done in id, hence exhaustive
-                    CSR_MSTATUS:  mstatus  <= rw_bus.w_data;
-                    CSR_MTVEC:    mtvec    <= rw_bus.w_data;
-                    CSR_MEPC:     mepc     <= rw_bus.w_data;
-                    CSR_MCAUSE:   mcause   <= rw_bus.w_data;
-                    CSR_MTVAL:    mtval    <= rw_bus.w_data;
-                    CSR_MIE:      mie      <= rw_bus.w_data;
-                    CSR_MSCRATCH: mscratch <= rw_bus.w_data;
+                    CSR_MSTATUS:  mstatus  <= w_data;
+                    CSR_MTVEC:    mtvec    <= w_data;
+                    CSR_MEPC:     mepc     <= w_data;
+                    CSR_MCAUSE:   mcause   <= w_data;
+                    CSR_MTVAL:    mtval    <= w_data;
+                    CSR_MIE:      mie      <= w_data;
+                    CSR_MSCRATCH: mscratch <= w_data;
 
-                    CSR_SSTATUS:  mstatus  <= (rw_bus.w_data & MSTATUS_S_MASK) |
-                                            (mstatus & ~MSTATUS_S_MASK);
+                    CSR_SSTATUS:  mstatus  <= (w_data & MSTATUS_S_MASK) |
+                                              (mstatus & ~MSTATUS_S_MASK);
 
-                    CSR_SEPC:     sepc     <= rw_bus.w_data;
-                    CSR_STVEC:    stvec    <= rw_bus.w_data;
-                    CSR_SCAUSE:   scause   <= rw_bus.w_data;
-                    CSR_STVAL:    stval    <= rw_bus.w_data;
-                    CSR_SSCRATCH: sscratch <= rw_bus.w_data;
+                    CSR_SEPC:     sepc     <= w_data;
+                    CSR_STVEC:    stvec    <= w_data;
+                    CSR_SCAUSE:   scause   <= w_data;
+                    CSR_STVAL:    stval    <= w_data;
+                    CSR_SSCRATCH: sscratch <= w_data;
 
-                    CSR_MEDELEG:  medeleg  <= rw_bus.w_data;
-                    CSR_MIDELEG:  mideleg  <= rw_bus.w_data;
+                    CSR_MEDELEG:  medeleg  <= w_data;
+                    CSR_MIDELEG:  mideleg  <= w_data;
 
-                    CSR_SATP:     satp     <= rw_bus.w_data;
+                    CSR_SATP: begin
+                        if (w_data_satp_mode == SATP_SV39 || w_data_satp_mode == SATP_BARE)
+                            satp <= w_data;
+                    end
                 endcase
             end
 
             if (trap) begin
                 if (!deleg) begin
-                    mstatus[MSTATUS_MPP -: 2]  <= priv_lvl;
+                    mstatus[MSTATUS_MPP_H : MSTATUS_MPP_L] <= priv_lvl;
                     priv_lvl <= PRIV_M;
 
                     mstatus[MSTATUS_MPIE] <= mstatus[MSTATUS_MIE];
@@ -252,8 +266,8 @@ module csr_file(
                 end
             end
             else if (trap_bus.take_mret) begin
-                priv_lvl <= mstatus[MSTATUS_MPP -: 2];
-                mstatus[MSTATUS_MPP -: 2] <= PRIV_U;  // specs demand this; failsafe for buggy kernels...
+                priv_lvl <= mstatus[MSTATUS_MPP_H : MSTATUS_MPP_L];
+                mstatus[MSTATUS_MPP_H : MSTATUS_MPP_L] <= PRIV_U;  // specs demand this; failsafe for buggy kernels...
 
                 mstatus[MSTATUS_MIE]  <= mstatus[MSTATUS_MPIE];
                 mstatus[MSTATUS_MPIE] <= 1;

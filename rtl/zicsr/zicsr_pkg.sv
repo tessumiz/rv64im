@@ -38,13 +38,28 @@ package zicsr_pkg;
     localparam int unsigned
         MSTATUS_SIE  = 1,
         MSTATUS_MIE  = 3,
+
         MSTATUS_SPIE = 5,
         MSTATUS_MPIE = 7,
-        MSTATUS_SPP  = 8,
-        MSTATUS_MPP  = 12,  // high bit
+    
+        MSTATUS_SPP   = 8,
+        MSTATUS_MPP_H = 12,
+        MSTATUS_MPP_L = 11,
 
         MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (3 << MSTATUS_SPP);
     
+
+    typedef struct packed {
+        logic [43:0] ppn;
+        logic [15:0] asid;
+        logic [3:0]  mode;
+    } satp_t;
+
+    localparam int unsigned
+        SATP_BARE = 0,
+        SATP_SV39 = 8;
+
+
     localparam int unsigned
         EXT_INT  = 11,
         TMR_INT  = 7,

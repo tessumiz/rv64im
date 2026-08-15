@@ -14,10 +14,9 @@ module lsu (
 );
 
     always_comb begin
-        if (!mem_op) begin
-            is_misaligned = 0;
-        end
-        else begin
+        is_misaligned = 0;
+
+        if (mem_op) begin
             unique case (f3[1:0])
                 MEM_BYTE:  is_misaligned = (addr[0] != 0);
                 MEM_HWORD: is_misaligned = (addr[1:0] != 0);

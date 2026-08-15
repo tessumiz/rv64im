@@ -11,5 +11,9 @@ package mem_pkg;
         logic        d;
     } tlb_entry_t;
 
-    typedef enum { IDLE, TAG_CMP, REQ_FILL, R_FILL, SUBWORD_W_FILL, WRITE } set_cache_fsm_t;
+    typedef enum { CACHE_IDLE, TAG_CMP, EVICT, REQ_FILL, R_FILL, SUBWORD_W_FILL, WRITE } set_cache_fsm_t;
+
+    typedef enum { PTW_IDLE, PTW_WAIT, PTW_WALK } ptw_fsm_t;
+    typedef enum { PTW_LVL1, PTW_LVL2, PTW_LVL3 } ptw_lvl_t;
+
 endpackage

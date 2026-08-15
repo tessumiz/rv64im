@@ -108,8 +108,8 @@ module decoder (
                 ctrl.wb       = 1;
 
                 if (op == OP_REG) begin
-                    ctrl.is_imul = (f7 == F7_1) && !f3[2];
-                    ctrl.is_idiv = (f7 == F7_1) &&  f3[2];
+                    ctrl.is_mul = (f7 == F7_1) && !f3[2];
+                    ctrl.is_div = (f7 == F7_1) &&  f3[2];
                 end
             end
 
