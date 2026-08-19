@@ -46,8 +46,11 @@ package zicsr_pkg;
         MSTATUS_MPP_H = 12,
         MSTATUS_MPP_L = 11,
 
+        MSTATUS_SUM   = 18,
+        MSTATUS_MXR   = 19,
+
         MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (3 << MSTATUS_SPP);
-    
+
 
     typedef struct packed {
         logic [43:0] ppn;
@@ -57,7 +60,9 @@ package zicsr_pkg;
 
     localparam int unsigned
         SATP_BARE = 0,
-        SATP_SV39 = 8;
+        SATP_SV39 = 8,
+        SATP_SV48 = 9,
+        SATP_SV57 = 10;
 
 
     localparam int unsigned

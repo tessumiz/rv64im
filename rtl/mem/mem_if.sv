@@ -21,7 +21,7 @@ endinterface
 
 
 interface dmem_if;
-    logic [63:0] v_addr;
+    logic [63:0] p_addr;
 
     logic        r_en;
     logic [63:0] r_data;
@@ -36,12 +36,12 @@ interface dmem_if;
     logic        page_fault;
 
     modport master (
-        output v_addr, f3_2, w_data, w_en, r_en,
+        output p_addr, f3_2, w_data, w_en, r_en,
         input  r_data, busy, access_fault, page_fault
     );
 
     modport slave (
-        input  v_addr, f3_2, w_data, w_en, r_en,
+        input  p_addr, f3_2, w_data, w_en, r_en,
         output r_data, busy, access_fault, page_fault
     );
 endinterface
@@ -102,16 +102,41 @@ interface dram_if;
     logic        w_en;
     logic [63:0] w_data;
 
+    logic        busy;
     logic        ready;
     logic        access_fault;
 
     modport master (
         output addr, r_en, w_en, w_data,
-        input  r_data, ready, access_fault
+        input  busy, ready, r_data, access_fault
     );
 
     modport slave (
         input  addr, r_en, w_en, w_data,
-        output r_data, ready, access_fault
+        output busy, ready, r_data, access_fault
     );
+endinterface
+
+
+
+interface mmu_ctx_if;
+    logic [43:0] root_ppn;
+    logic [3:0]  mode;
+    logic        SUM;
+    logic        MXR;
+    logic [1:0]  priv;
+    logic [15:0] asid;
+
+    modport csr_master (
+        output asid, mode, SUM, MXR
+    );
+
+    modport tlb_view (
+        input asid, mode, SUM, MXR, priv
+    );
+
+    modport ptw_view (
+        input root_ppn, asid, mode, SUM, MXR, priv
+    );
+
 endinterface

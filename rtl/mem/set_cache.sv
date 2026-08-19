@@ -73,40 +73,40 @@ module set_cache #(
             unique case (state)
                 CACHE_IDLE : begin
                     if (bus.r_en || bus.w_en) begin
-                        state  <= TAG_CMP;
+                        state  <= CACHE_TAG_CMP;
                         cmp_in_line <= mem [bus.set_idx];
                         cmp_in_meta <= meta[bus.set_idx];
                     end
                 end
 
-                TAG_CMP : begin
+                CACHE_TAG_CMP : begin
                     if (bus.evict_wb)
-                        state <= EVICT;
+                        state <= CACHE_EVICT;
                     else if (bus.r_en)
-                        state <= hit ? CACHE_IDLE : REQ_FILL;
+                        state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
                     else
-                        state <= (is_subword_w && miss) ? REQ_FILL : WRITE;
+                        state <= (is_subword_w && miss) ? CACHE_REQ_FILL : CACHE_WRITE;
                 end
 
-                EVICT : begin
+                CACHE_EVICT : begin
                     if (bus.evict_complete) begin
                         if (bus.r_en)
-                            state <= hit ? CACHE_IDLE : REQ_FILL;
+                            state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
                         else
-                            state <= (is_subword_w && miss) ? REQ_FILL : WRITE;
+                            state <= (is_subword_w && miss) ? CACHE_REQ_FILL : CACHE_WRITE;
                     end
                 end
 
-                REQ_FILL : begin
+                CACHE_REQ_FILL : begin
                     if (bus.fill_en)
-                        state <= bus.r_en ? R_FILL : SUBWORD_W_FILL;
+                        state <= bus.r_en ? CACHE_R_FILL : CACHE_SUBWORD_W_FILL;
                 end
 
-                SUBWORD_W_FILL : begin
-                    state <= WRITE;
+                CACHE_SUBWORD_W_FILL : begin
+                    state <= CACHE_WRITE;
                 end
 
-                R_FILL, WRITE : begin
+                CACHE_R_FILL, CACHE_WRITE : begin
                     state <= CACHE_IDLE;
                 end
             endcase
@@ -146,7 +146,7 @@ module set_cache #(
         if (rst) begin
             victim_way_ff <= 0;
         end
-        else if (state == TAG_CMP) begin
+        else if (state == CACHE_TAG_CMP) begin
             victim_way_ff <= curr_victim_way;
         end
     end
@@ -172,7 +172,7 @@ module set_cache #(
     meta_t victim_meta;
 
     always_comb begin
-        victim_way  = (state == TAG_CMP) ? curr_victim_way : victim_way_ff;
+        victim_way  = (state == CACHE_TAG_CMP) ? curr_victim_way : victim_way_ff;
         victim_line = cmp_in_line[victim_way];
         victim_meta = cmp_in_meta[victim_way];
 
@@ -181,22 +181,22 @@ module set_cache #(
         bus.r_data = hit ? hit_line.data : bus.fill_data;
 
         bus.fill_req =
-            (state == TAG_CMP) && miss && (
+            (state == CACHE_TAG_CMP) && miss && (
             (bus.r_en || (bus.w_en && is_subword_w))
         );
 
         bus.evict_wb =
-            (state == TAG_CMP && miss && victim_meta.valid && victim_meta.dirty) ||
-            (state == EVICT);
+            (state == CACHE_TAG_CMP && miss && victim_meta.valid && victim_meta.dirty) ||
+            (state == CACHE_EVICT);
 
         bus.evict_tag = victim_line.tag;
         bus.evicted_data = victim_line.data;
 
         norm_w =
-            (state == TAG_CMP && bus.w_en && !(miss && is_subword_w)) ||
-            (state == SUBWORD_W_FILL);
+            (state == CACHE_TAG_CMP && bus.w_en && !(miss && is_subword_w)) ||
+            (state == CACHE_SUBWORD_W_FILL);
 
-        write  = norm_w || (state == REQ_FILL && bus.fill_en);
+        write  = norm_w || (state == CACHE_REQ_FILL && bus.fill_en);
         w_way  = norm_w && hit ? hit_way : victim_way;
 
 
@@ -206,14 +206,14 @@ module set_cache #(
             w_wmask = bus.w_mask;
             w_dirty = 1;
         end
-        // miss fill; when (state == REQ_FILL && bus.fill_en)
+        // miss fill; when (state == CACHE_REQ_FILL && bus.fill_en)
         else begin
             w_data  = bus.fill_data;
             w_wmask = '1;
             w_dirty =  0;
         end
 
-        bus.ready = ((state == TAG_CMP && bus.r_en) || state == R_FILL || state == WRITE);
+        bus.ready = ((state == CACHE_TAG_CMP && bus.r_en) || state == CACHE_R_FILL || state == CACHE_WRITE);
     end
 
     always_ff @(posedge clk) begin

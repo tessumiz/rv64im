@@ -190,10 +190,7 @@ module csr_file(
     end
 
     logic [63:0] w_data;
-    logic [3:0]  w_data_satp_mode;
-
     assign w_data = rw_bus.w_data;
-    assign w_data_satp_mode = w_data[63:60];
 
 
     always_ff @(posedge clk) begin
@@ -235,7 +232,7 @@ module csr_file(
                     CSR_MIDELEG:  mideleg  <= w_data;
 
                     CSR_SATP: begin
-                        if (w_data_satp_mode == SATP_SV39 || w_data_satp_mode == SATP_BARE)
+                        if (w_data[63:60] inside {SATP_BARE, SATP_SV39, SATP_SV48, SATP_SV57})
                             satp <= w_data;
                     end
                 endcase

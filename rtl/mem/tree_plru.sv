@@ -1,5 +1,6 @@
 import mem_pkg::*;
 
+
 module tree_plru(
     input logic clk,
     input logic rst,
@@ -58,7 +59,7 @@ module tree_plru(
         if (rst) begin
             plru <= '0;
         end
-        else if (state == TAG_CMP) begin
+        else if (state == CACHE_TAG_CMP) begin
             plru[bus.set_idx] <= nxt_plru;
         end
     end
