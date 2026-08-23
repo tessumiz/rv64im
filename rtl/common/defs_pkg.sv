@@ -1,5 +1,7 @@
 package defs_pkg;
 
+    typedef int unsigned uint;
+
     localparam logic [4:0]
         OP_LD   = 5'b00000,
         OP_ST   = 5'b01000,
@@ -32,12 +34,6 @@ package defs_pkg;
         F7_0 = 7'b0000000,
         F7_1 = 7'b0000001,
         F7_2 = 7'b0100000;
-
-    localparam logic [1:0]
-        MEM_BYTE = 2'b00,
-        MEM_HWORD = 2'b01,
-        MEM_WORD = 2'b10,
-        MEM_DWORD = 2'b11;
 
 
     typedef struct packed {

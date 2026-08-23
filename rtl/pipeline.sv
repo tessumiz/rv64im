@@ -281,6 +281,7 @@ module pipeline(
         .ld_use_haz  (ld_use_haz)
     );
 
+
     muldiv_haz u_muldiv_haz (
         .clk   (clk),
         .rst   (rst),

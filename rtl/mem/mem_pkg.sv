@@ -1,5 +1,22 @@
 package mem_pkg;
 
+    localparam logic [1:0]
+        MEM_BYTE  = 2'b00,
+        MEM_HWORD = 2'b01,
+        MEM_WORD  = 2'b10,
+        MEM_DWORD = 2'b11;
+
+
+    typedef struct packed {
+        logic [43:0] root_ppn;
+        logic [15:0] asid;
+        logic [3:0]  mode;
+        logic [1:0]  priv;
+        logic        SUM;
+        logic        MXR;
+    } mmu_ctx_t;
+
+
     typedef struct packed {
         logic [11:0] asid;
         logic [63:0] vpn;
@@ -50,7 +67,7 @@ package mem_pkg;
 
 
     typedef enum { CACHE_IDLE, CACHE_TAG_CMP, CACHE_EVICT, CACHE_REQ_FILL,
-                   CACHE_R_FILL, CACHE_SUBWORD_W_FILL, CACHE_WRITE } set_cache_fsm_t;
+                   CACHE_R_FILL, CACHE_SUBWORD_W_FILL, CACHE_WRITE, CACHE_CLR } set_cache_fsm_t;
 
     typedef enum { PTW_IDLE, PTW_CHECK_PWC, PTW_READ, PTW_CHECK_PTE, PTW_WRITE } ptw_fsm_t;
     typedef enum { PTW_LVL4, PTW_LVL3, PTW_LVL2, PTW_LVL1, PTW_LVL0 } ptw_lvl_t;

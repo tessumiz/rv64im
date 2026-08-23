@@ -1,10 +1,10 @@
 import defs_pkg::*;
 import zicsr_pkg::*;
 
-// !!!!!##### INTERRUPTS ON BUBBLES
 
 module mem_stage (
     input  ex_mem_t     ex_mem,
+
     dmem_if.master      dmem_bus,
     csr_trap_if.master  trap_bus,
 
@@ -20,6 +20,8 @@ module mem_stage (
 );
 
     logic [63:0] addr;
+    assign addr  = ex_mem.ex_res;
+
     logic [63:0] r_data;
     
     logic        is_misaligned;
@@ -32,22 +34,22 @@ module mem_stage (
 
     logic  safe;
 
-    assign addr  = ex_mem.ex_res;
-
-    logic  mem_op;
-    assign mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;
+    logic  is_mem_op;
+    assign is_mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;
 
 
     lsu u_lsu (
-        .mem_op     (mem_op),
-        .f3         (ex_mem.f3),
-        .addr       (addr),
+        .is_mem_op     (is_mem_op),
+        .f3            (ex_mem.f3),
+        .addr          (addr),
 
-        .r_data_raw (dmem_bus.r_data),
-        .r_data_fmt (r_data),
-
+        .r_data_raw    (dmem_bus.r_data),
         .w_data_raw    (ex_mem.rs2),
+
+        .r_data_fmt    (r_data),
         .w_data_fmt    (dmem_bus.w_data),
+        .w_mask        (dmem_bus.w_mask),
+
         .is_misaligned (is_misaligned)
     );
 
@@ -59,14 +61,14 @@ module mem_stage (
         is_exc  = (ex_mem.exc.valid || is_misaligned);
         is_mret = ex_mem.exc.is_mret;
         is_sret = ex_mem.exc.is_sret;
-        is_irq  = trap_bus.irq_pending && !dmem_bus.busy;  // wait for dmem...
+        is_irq  = trap_bus.irq_pending; // && !dmem_bus.busy;  // wait for dmem...
 
         safe = !(is_exc || is_mret || is_sret || is_irq);  // irq flushes curr instr; else finding nxt_pc would be hard
 
-        dmem_bus.f3_2 = ex_mem.f3[1:0];
-        dmem_bus.w_en = ex_mem.ctrl.mem_w && safe;
-        dmem_bus.r_en = ex_mem.ctrl.mem_r && safe;
-        dmem_bus.v_addr = addr;
+        // dmem_bus.f3_2 = ex_mem.f3[1:0];
+        // dmem_bus.w_en = ex_mem.ctrl.mem_w && safe;
+        // dmem_bus.r_en = ex_mem.ctrl.mem_r && safe;
+        // dmem_bus.vaddr = addr;
 
         trap_bus.take_exc  = is_exc;
         trap_bus.take_mret = is_mret;

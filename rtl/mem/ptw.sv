@@ -2,17 +2,17 @@ import mem_pkg::*;
 import zicsr_pkg::*;
 
 
-// supports sv39, sv48 and sv57
+// supports sv39, sv48 and sv57 (added for fun, was never a strict necessity...)
 module ptw(
     input clk,
     input rst,
 
-    input logic valid,
-    input vpn_t vaddr,
-    input logic w, x, u,
+    input logic     valid,
+    input vpn_t     vaddr,
+    input logic     w, x, u,
+    input mmu_ctx_t mmu_ctx,
 
-    mmu_ctx_if.ptw_view mmu_ctx,
-    dram_if.master      ram_bus,
+    ptw_dram_if.master  ram_bus,
 
     output logic        ready,
     output logic [43:0] ppn_out,
@@ -36,9 +36,8 @@ module ptw(
     logic [55:12] curr_root;  // ppn (4KiB aligned)
     logic [55:3]  curr_addr;  // 8B aligned
 
-    pte_t    entry;  // pte at (root + offset) [latch]
-    pte_t    pte;   // [comb]
-    
+    pte_t    pte;  // pte at (root + offset) [ff]
+
     logic [43:0] pte_ppn;
     assign pte_ppn = { pte.ppn4, pte.ppn3, pte.ppn2, pte.ppn1, pte.ppn0 };
 
@@ -91,16 +90,14 @@ module ptw(
 
         r  = !(w | x);
 
-        if (state == PTW_READ && !access_fault && ram_bus.ready)
-            pte = ram_bus.r_data;
-        else if (state == PTW_IDLE)
-            pte = 0;
-        else
-            pte = entry;
-
         ram_bus.addr = {curr_addr, 3'b0};
-        ram_bus.r_en = (state == PTW_CHECK_PWC && !pwc_hit) ||
-                       (state == PTW_CHECK_PTE && !page_fault && !is_leaf);
+
+        /*
+        Fix; pre-emptive read (as well as write) requests were purged because it
+        makes the pipeline more complicated (fwd-ing, latches, larger comb circuits),
+        just to save 1 cycle before a dram read...
+        */
+        ram_bus.r_en = (state == PTW_READ);
 
 
         is_leaf = pte.r || pte.w || pte.x;
@@ -108,9 +105,13 @@ module ptw(
         // no error is thrown for any combination of A and D if not a leaf
         rmw_A_D = is_leaf && (!pte.a || (w && !pte.d)) && !(page_fault || access_fault);
 
-        /* 'ready' being a pulse, I would have to latch it if I were to dispatch
-        the A/D write one cycle earlier, which has poor ROI... */
-        ram_bus.w_en   = (state == PTW_WRITE) && rmw_A_D;
+
+        /*
+        "ready" being a pulse, I would have to latch it if I were to dispatch
+        the A/D write one cycle earlier, which has poor ROI. At the cost of a single
+        cycle, I can use "state == PTW_WRITE" as a latched, persistent signal
+        */
+        ram_bus.w_en   = (state == PTW_WRITE);
         ram_bus.w_data = pte | pte_t'{ a: 1, d: w, default: 0 };
 
 
@@ -153,8 +154,7 @@ module ptw(
         );
 
         access_fault = (ram_bus.ready && ram_bus.access_fault);
-        
-        // doesn't mask with faults!
+
         ready = (state == PTW_CHECK_PTE && is_leaf && !rmw_A_D) || 
                 (state == PTW_WRITE && ram_bus.ready);
     end
@@ -168,17 +168,24 @@ module ptw(
             unique case (state)
                 PTW_IDLE : begin
                     if (valid) begin
-                        /* (input + curr_addr-mux + r_en-hold) creates a critical path
+                        /*
+                        (inp_delay + t(decode) + mux + r_en(setup)) creates a critical path
                         otherwise not an issue for subsequent level walks as the latency
-                        is just (level-tCQ + curr_addr-mux + r_en-hold)
+                        is tCQ of level ff instead of inp_delay.
                         
+                        Basically, subsequent level-ff's tCQ is small and predictable, unlike
+                        the input; if the mem controller buffers the tlb's request for 1 cycle,
+                        fine but I wanted to make it safe enough.
+
                         Instead of wasting a clock cycle with a lame state like PTW_SETUP,
                         I've used the extra time for checking a pwc. Yeah, might be overkill
-                        but it doesn't affect clk freq */
+                        but it doesn't affect clk freq
+                        */
 
                         state     <= PTW_CHECK_PWC;
                         level     <= start_level;
                         curr_root <= mmu_ctx.root_ppn;
+                        pte       <= '0;
                     end
                 end
 
@@ -196,14 +203,18 @@ module ptw(
                         state <= PTW_IDLE;
 
                     else if (ram_bus.ready) begin
-                        entry <= ram_bus.r_data;
+                        pte   <= ram_bus.r_data;
                         state <= PTW_CHECK_PTE;
                     end
                 end
 
-                /* Broke a critical path favouring increased latency over decreased clk freq.
+                /*
+                Broke a critical path favouring increased latency over decreased clk freq.
                 The critical path if PTE check was done in PTW_READ is especially nasty given
-                the bus latencies bw ptw and dram */
+                the bus latencies bw ptw and dram.
+
+                Previously had a fwd-mux for ram_bus.r_data, removed it...
+                */
                 PTW_CHECK_PTE : begin
                     if (page_fault)
                         state <= PTW_IDLE;

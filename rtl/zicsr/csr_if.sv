@@ -1,5 +1,6 @@
 import defs_pkg::*;
 
+
 interface csr_rw_if;
     logic        r_en;
     logic [11:0] r_addr;

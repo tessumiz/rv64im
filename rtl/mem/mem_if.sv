@@ -1,60 +1,62 @@
+import defs_pkg::uint;
+
+
 interface imem_if;
     logic [63:0] v_addr;
-    logic [31:0] data;
 
     logic        r_en;
-    logic        busy;
+    logic [31:0] r_data;
 
-    logic        access_fault;
-    logic        page_fault;
+    logic        busy, ready;
+    logic        access_fault, page_fault;
 
     modport master (
         output v_addr, r_en,
-        input data, busy, access_fault, page_fault
+        input r_data, busy, ready, access_fault, page_fault
     );
 
     modport slave (
         input v_addr, r_en,
-        output data, busy, access_fault, page_fault
+        output r_data, busy, ready, access_fault, page_fault
     );
 endinterface
 
 
 interface dmem_if;
-    logic [63:0] p_addr;
+    logic [63:0] v_addr;
 
     logic        r_en;
     logic [63:0] r_data;
 
     logic        w_en;
     logic [63:0] w_data;
-    logic [1:0]  f3_2;  // for the lsu
+    logic [7:0]  w_mask;
 
-    logic        busy;
-
-    logic        access_fault;
-    logic        page_fault;
+    logic        busy, ready;
+    logic        access_fault, page_fault;
 
     modport master (
-        output p_addr, f3_2, w_data, w_en, r_en,
-        input  r_data, busy, access_fault, page_fault
+        output v_addr, w_data, w_mask, w_en, r_en,
+        input  r_data, busy, ready, access_fault, page_fault
     );
 
     modport slave (
-        input  p_addr, f3_2, w_data, w_en, r_en,
-        output r_data, busy, access_fault, page_fault
+        input  v_addr, w_data, w_mask, w_en, r_en,
+        output r_data, busy, ready, access_fault, page_fault
     );
 endinterface
 
 
-// set assoc cache
+
 interface set_cache_if #(
-    parameter type TAG_T,
-    parameter type DATA_T,
-    parameter int  SETS
+    parameter type  TAG_T,
+    parameter type  DATA_T,
+    parameter uint  SETS,
+    parameter uint  WAYS
 );
-    localparam int IDX_W  = $clog2(SETS);
-    localparam int W_MASK_LEN = $bits(DATA_T) / 8;
+    localparam uint IDX_W      = uint'($clog2(SETS));
+    localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
+    parameter  uint WAY_LOG_W  = $clog2(bus.WAYS);
 
     logic  [IDX_W-1:0] set_idx;
     TAG_T  tag;
@@ -78,22 +80,22 @@ interface set_cache_if #(
     logic  fill_req;
 
     logic  hit;
+    logic  busy;
     logic  ready;
 
-    modport req (
+    modport master (
         output set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
-        input  r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req
+        input  r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req, busy
     );
 
-    modport slave(
+    modport cache (
         input  set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
-        output r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req
+        output r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req, busy
     );
 endinterface
 
 
-// ptw
-interface dram_if;
+interface ptw_dram_if;
     logic [55:0] addr;
 
     logic        r_en;
@@ -118,25 +120,4 @@ interface dram_if;
 endinterface
 
 
-
-interface mmu_ctx_if;
-    logic [43:0] root_ppn;
-    logic [3:0]  mode;
-    logic        SUM;
-    logic        MXR;
-    logic [1:0]  priv;
-    logic [15:0] asid;
-
-    modport csr_master (
-        output asid, mode, SUM, MXR
-    );
-
-    modport tlb_view (
-        input asid, mode, SUM, MXR, priv
-    );
-
-    modport ptw_view (
-        input root_ppn, asid, mode, SUM, MXR, priv
-    );
-
-endinterface
+// Removed mmu_ctx_if; it's a struct now

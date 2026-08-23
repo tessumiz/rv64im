@@ -34,8 +34,8 @@ module fetch (
     logic [63:0] nxt_pc;
 
     always_comb begin
-        imem_bus.addr = pc;
-        imem_bus.r_en = !flush;
+        // imem_bus.addr = pc;
+        // imem_bus.r_en = !flush;
 
         nxt_pc =
             take_br     ? br_targ     :

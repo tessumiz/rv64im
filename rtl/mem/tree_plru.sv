@@ -1,57 +1,69 @@
-import mem_pkg::*;
+import defs_pkg::uint;
 
 
 module tree_plru(
     input logic clk,
     input logic rst,
 
-    input [2:0] hit_way,
-    set_cache_fsm_t state,
+    set_cache_if.cache bus,
 
-    set_cache_if.slave bus,
+    input logic [bus.WAY_LOG_W-1:0] hit_way,
+    input logic [bus.WAYS-1:0]      cmp_in_valid,
 
-    output logic [2:0] victim_way
+    output logic [bus.WAY_LOG_W-1:0] victim_way
 );
 
-    typedef logic [6:0] plru_t;
+    parameter uint WAYS      = bus.WAYS;
+    parameter uint WAY_LOG_W = bus.WAY_LOG_W;
+
+    typedef logic [WAY_LOG_W-1:0] way_idx_t;
+    typedef logic [WAYS-2:0]      plru_t;
 
     plru_t plru [bus.SETS-1:0];
     plru_t curr_plru, nxt_plru;
 
-    logic [2:0] accessed_way;
+    way_idx_t accessed_way;
+
 
     always_comb begin
-        // Finding a victim; empty lines can be victims as well
+        // finding a victim; empty lines can be victims as well
         curr_plru = plru[bus.set_idx];
 
-        victim_way[2] = curr_plru[0];
-        victim_way[1] = !curr_plru[0] ? curr_plru[1] : curr_plru[2];
+        for (uint i = 0; i < WAY_LOG_W; i++) begin
+            automatic uint way_idx  = (WAY_LOG_W - 1) - i;
+            automatic uint plru_idx = (2 ** i) - 1;
+            automatic uint offset   = (victim_way >> (way_idx + 1));
 
-        unique case (victim_way[2:1])
-            2'b00: victim_way[0] = curr_plru[3];
-            2'b01: victim_way[0] = curr_plru[4];
-            2'b10: victim_way[0] = curr_plru[5];
-            2'b11: victim_way[0] = curr_plru[6];
-        endcase
+            victim_way[way_idx] = curr_plru[plru_idx + offset];
+        end
 
-        // updating the plru; fills dealt with here
+        /*
+        An issue with tree plru is; one freq accessed elm can act as a
+        proxy to lesser accessed elms in its same binary bucket, which means
+        hotter elms get selected for eviction. In one way, this can help due to
+        spatial locality; a conflict between spatial as well as temporal locality.
+
+        But invalid lines are an exception. I'm using a priotity encoder to at
+        the least evict any empty lines first..
+        */
+        for (uint i = 0; i < WAYS; i++) begin
+            if (!cmp_in_valid[i])
+                victim_way = i;
+        end
+
+
+        // generating nxt_plru; fills dealt with here
         accessed_way = bus.hit ? hit_way : victim_way;
         nxt_plru = curr_plru;
 
         if (bus.hit || bus.fill_req) begin
-            nxt_plru[0] = ~accessed_way[2];
+            for (uint i = 0; i < WAY_LOG_W; i++) begin
+                automatic uint way_idx  = (WAY_LOG_W - 1) - i;
+                automatic uint plru_idx = (2 ** i) - 1;
+                automatic uint offset   = (accessed_way >> (way_idx + 1));
 
-            if (accessed_way[2] == 0)
-                nxt_plru[1] = !accessed_way[1];
-            else
-                nxt_plru[2] = !accessed_way[1];
-            
-            unique case (accessed_way[2:1])
-                2'b00: nxt_plru[3] = ~accessed_way[0];
-                2'b01: nxt_plru[4] = ~accessed_way[0];
-                2'b10: nxt_plru[5] = ~accessed_way[0];
-                2'b11: nxt_plru[6] = ~accessed_way[0];
-            endcase
+                nxt_plru[plru_idx + offset] = ~accessed_way[way_idx];
+            end
         end
     end
 
@@ -59,7 +71,7 @@ module tree_plru(
         if (rst) begin
             plru <= '0;
         end
-        else if (state == CACHE_TAG_CMP) begin
+        else if (bus.ready) begin
             plru[bus.set_idx] <= nxt_plru;
         end
     end
