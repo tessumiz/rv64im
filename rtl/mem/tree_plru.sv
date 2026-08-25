@@ -1,25 +1,28 @@
 import defs_pkg::uint;
+import mem_pkg::*;
 
 
-module tree_plru(
+module tree_plru #(
+    parameter uint SETS = 64,
+    parameter uint WAYS = 4,
+    parameter uint WAY_LOG_W = 2
+)(
     input logic clk,
     input logic rst,
 
-    set_cache_if.cache bus,
+    input logic [$clog2(SETS)-1:0] set_idx,
+    input plru_ctrl_t              ctrl,
 
-    input logic [bus.WAY_LOG_W-1:0] hit_way,
-    input logic [bus.WAYS-1:0]      cmp_in_valid,
+    input logic [WAY_LOG_W-1:0]    hit_way,
+    input logic [WAYS-1:0]         cmp_in_valid,
 
-    output logic [bus.WAY_LOG_W-1:0] victim_way
+    output logic [WAY_LOG_W-1:0]   victim_way
 );
-
-    parameter uint WAYS      = bus.WAYS;
-    parameter uint WAY_LOG_W = bus.WAY_LOG_W;
 
     typedef logic [WAY_LOG_W-1:0] way_idx_t;
     typedef logic [WAYS-2:0]      plru_t;
 
-    plru_t plru [bus.SETS-1:0];
+    plru_t plru [SETS-1:0];
     plru_t curr_plru, nxt_plru;
 
     way_idx_t accessed_way;
@@ -27,7 +30,7 @@ module tree_plru(
 
     always_comb begin
         // finding a victim; empty lines can be victims as well
-        curr_plru = plru[bus.set_idx];
+        curr_plru = plru[set_idx];
 
         for (uint i = 0; i < WAY_LOG_W; i++) begin
             automatic uint way_idx  = (WAY_LOG_W - 1) - i;
@@ -48,15 +51,15 @@ module tree_plru(
         */
         for (uint i = 0; i < WAYS; i++) begin
             if (!cmp_in_valid[i])
-                victim_way = i;
+                victim_way = i[WAY_LOG_W-1 : 0];
         end
 
 
         // generating nxt_plru; fills dealt with here
-        accessed_way = bus.hit ? hit_way : victim_way;
+        accessed_way = ctrl.hit ? hit_way : victim_way;
         nxt_plru = curr_plru;
 
-        if (bus.hit || bus.fill_req) begin
+        if (ctrl.hit || ctrl.fill_req) begin
             for (uint i = 0; i < WAY_LOG_W; i++) begin
                 automatic uint way_idx  = (WAY_LOG_W - 1) - i;
                 automatic uint plru_idx = (2 ** i) - 1;
@@ -69,10 +72,10 @@ module tree_plru(
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            plru <= '0;
+            plru <= '{ default: 0 };
         end
-        else if (bus.ready) begin
-            plru[bus.set_idx] <= nxt_plru;
+        else if (ctrl.ready) begin
+            plru[set_idx] <= nxt_plru;
         end
     end
 endmodule

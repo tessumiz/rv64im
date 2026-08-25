@@ -12,7 +12,7 @@ module ptw(
     input logic     w, x, u,
     input mmu_ctx_t mmu_ctx,
 
-    ptw_dram_if.master  ram_bus,
+    gen_mem_if.master   ram_bus,
 
     output logic        ready,
     output logic [43:0] ppn_out,
@@ -61,7 +61,7 @@ module ptw(
         .clk (clk),
         .rst (rst),  // sfence.vma asserts this...
 
-        .pwc_in (pwc_tag),
+        .pwc_in    (pwc_tag),
 
         .hit       (pwc_hit),
         .lvl1_root (pwc_lvl1_root),
@@ -133,24 +133,27 @@ module ptw(
         endcase
 
 
-        misaligned_superpage = is_leaf && (
+        misaligned_superpage = (
             (level == PTW_LVL4 && { pte.ppn3, pte.ppn2, pte.ppn1, pte.ppn0 } != 0) ||
             (level == PTW_LVL3 && { pte.ppn2, pte.ppn1, pte.ppn0 } != 0) ||
             (level == PTW_LVL2 && { pte.ppn1, pte.ppn0 } != 0) ||
             (level == PTW_LVL1 && pte.ppn0 != 0)
         );
 
-        page_fault = (state == PTW_CHECK_PTE) && (
-            !pte.v ||
-            pte[63:54] != 0 ||    // reserved
-            (!pte.r && pte.w) ||  // write-only memory is illegal
-            ((u && !pte.u) || (!u && pte.u && !mmu_ctx.SUM)) ||  // allow U reads for sv iff SUM
+        page_fault = (state == PTW_CHECK_PTE) & (
+            !pte.v |
+            pte[63:54] != 0 |    // reserved
+            (!pte.r & pte.w) |  // write-only memory is illegal
 
-            (!pte.w  && w) ||
-            (!pte.x  && x) ||
-            (!pte.r  && r && !(pte.x && mmu_ctx.MXR)) ||  // allow R=0 reads iff X and MXR
+            (is_leaf & (
+                (!pte.w  & w) |
+                (!pte.x  & x) |
+                (!pte.r  & r & !(pte.x & mmu_ctx.MXR)) |  // allow R=0 reads iff X and MXR
+                ((u & !pte.u) | (!u & pte.u & (!mmu_ctx.SUM | x))) |  // allow U rw for sv iff SUM
+                misaligned_superpage
+            )) |
 
-            misaligned_superpage
+            (!is_leaf & (pte.d | pte.a | pte.u | (level == PTW_LVL0)))
         );
 
         access_fault = (ram_bus.ready && ram_bus.access_fault);

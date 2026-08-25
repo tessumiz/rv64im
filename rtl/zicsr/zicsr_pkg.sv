@@ -1,4 +1,10 @@
 package zicsr_pkg;
+    localparam int unsigned
+        PRIV_U = 2'b00,
+        PRIV_S = 2'b01,
+        PRIV_M = 2'b11;
+
+
     localparam logic [11:0] 
         CSR_MSTATUS   = 12'h300,
         CSR_MTVEC     = 12'h305,
@@ -49,7 +55,8 @@ package zicsr_pkg;
         MSTATUS_SUM   = 18,
         MSTATUS_MXR   = 19,
 
-        MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (3 << MSTATUS_SPP);
+        MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (3 << MSTATUS_SPP),
+        MSTATUS_RST    = (PRIV_M << MSTATUS_MPP_L);  // MIE, SIE, MPIE, SPIE, SUM, MXR = 0
 
 
     typedef struct packed {
@@ -90,9 +97,4 @@ package zicsr_pkg;
         EXC_ECALL_M = 11,
         EXC_ECALL_S = 9,
         EXC_ECALL_U = 8;
-    
-    localparam int unsigned
-        PRIV_U = 2'b00,
-        PRIV_S = 2'b01,
-        PRIV_M = 2'b11;
 endpackage

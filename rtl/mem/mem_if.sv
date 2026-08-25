@@ -1,48 +1,46 @@
 import defs_pkg::uint;
 
 
-interface imem_if;
-    logic [63:0] v_addr;
+/*
+Use this generic full-duplex intf for internal connections.
+Dead code elimination will auto-remove unused signals. Beyond that,
+unused signals is just a matter of blurring semantic clarity.
+*/
+interface gen_mem_if #(
+    parameter int ADDR_W,
+    parameter int DATA_W,
 
-    logic        r_en;
-    logic [31:0] r_data;
+    // meta or any additional payload
+    parameter type REQ_DATA_T = logic,
+    parameter type RSP_DATA_T = logic
+);
+    localparam int MASK_W = DATA_W / 8;
 
-    logic        busy, ready;
-    logic        access_fault, page_fault;
+    logic [ADDR_W-1:0] addr;
+
+    logic              r_en;
+    logic              w_en;
+    logic [MASK_W-1:0] w_mask;
+
+    logic [DATA_W-1:0] r_data;
+    logic [DATA_W-1:0] w_data;
+
+    REQ_DATA_T         req_data;
+    RSP_DATA_T         rsp_data;
+
+    logic              busy;
+    logic              ready;
+    logic              access_fault;
+    logic              page_fault;
 
     modport master (
-        output v_addr, r_en,
-        input r_data, busy, ready, access_fault, page_fault
+        output addr, r_en, w_en, w_mask, w_data, req_data,
+        input  r_data, rsp_data, busy, ready, access_fault, page_fault
     );
 
     modport slave (
-        input v_addr, r_en,
-        output r_data, busy, ready, access_fault, page_fault
-    );
-endinterface
-
-
-interface dmem_if;
-    logic [63:0] v_addr;
-
-    logic        r_en;
-    logic [63:0] r_data;
-
-    logic        w_en;
-    logic [63:0] w_data;
-    logic [7:0]  w_mask;
-
-    logic        busy, ready;
-    logic        access_fault, page_fault;
-
-    modport master (
-        output v_addr, w_data, w_mask, w_en, r_en,
-        input  r_data, busy, ready, access_fault, page_fault
-    );
-
-    modport slave (
-        input  v_addr, w_data, w_mask, w_en, r_en,
-        output r_data, busy, ready, access_fault, page_fault
+        input  addr, r_en, w_en, w_mask, w_data, req_data,
+        output r_data, rsp_data, busy, ready, access_fault, page_fault
     );
 endinterface
 
@@ -55,8 +53,8 @@ interface set_cache_if #(
     parameter uint  WAYS
 );
     localparam uint IDX_W      = uint'($clog2(SETS));
+    localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
     localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
-    parameter  uint WAY_LOG_W  = $clog2(bus.WAYS);
 
     logic  [IDX_W-1:0] set_idx;
     TAG_T  tag;
@@ -95,27 +93,43 @@ interface set_cache_if #(
 endinterface
 
 
-interface ptw_dram_if;
-    logic [55:0] addr;
+interface tlb_if #(
+    parameter type  TAG_T,
+    parameter type  DATA_T,
+    parameter uint  SETS,
+    parameter uint  WAYS
+);
+    localparam uint IDX_W      = uint'($clog2(SETS));
+    localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
 
-    logic        r_en;
-    logic [63:0] r_data;
+    logic  [IDX_W-1:0] set_idx;
+    TAG_T  tag;
 
-    logic        w_en;
-    logic [63:0] w_data;
+    logic  valid;
+    DATA_T data;
 
-    logic        busy;
-    logic        ready;
-    logic        access_fault;
+    DATA_T fetched_page;
+    logic  page_fetched;
+    logic  page_req;
+    logic  fetch_fault;
+
+    logic  evict_page_wb;  // D gets set
+    logic  [IDX_W-1:0] evict_set_idx;
+
+    logic  hit;
+    logic  busy;
+    logic  ready;
+
+    logic  page_fault;
 
     modport master (
-        output addr, r_en, w_en, w_data,
-        input  busy, ready, r_data, access_fault
+        output set_idx, tag, valid, page_fetched, fetched_page, fetch_fault,
+        input  data, hit, ready, page_req, busy, page_fault, evict_page_wb, evict_set_idx
     );
 
-    modport slave (
-        input  addr, r_en, w_en, w_data,
-        output busy, ready, r_data, access_fault
+    modport cache (
+        input  set_idx, tag, valid, page_fetched, fetched_page, fetch_fault,
+        output data, hit, ready, page_req, busy, page_fault, evict_page_wb, evict_set_idx
     );
 endinterface
 

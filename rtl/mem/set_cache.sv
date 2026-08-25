@@ -1,20 +1,22 @@
 import mem_pkg::*;
 import defs_pkg::uint;
 
-module set_cache #(
-    parameter type DATA_T,
-    parameter type TAG_T
-)(
+
+module set_cache (
     input  logic clk,
     input  logic rst,
 
     set_cache_if.cache bus
 );
 
-    parameter uint SETS      = bus.SETS;
-    parameter uint WAYS      = bus.WAYS;
-    parameter uint WAY_LOG_W = bus.WAY_LOG_W;
-    typedef logic [WAY_LOG_W-1:0] way_idx_t;
+    localparam type DATA_T = bus.DATA_T;
+    localparam type TAG_T  = bus.TAG_T;
+    localparam uint SETS   = bus.SETS;
+    localparam uint WAYS   = bus.WAYS;
+
+    localparam uint WAY_LOG_W = bus.WAY_LOG_W;
+    typedef logic  [WAY_LOG_W-1:0] way_idx_t;
+
 
     typedef struct packed {
         TAG_T  tag;
@@ -27,6 +29,7 @@ module set_cache #(
     } meta_t;
 
 
+    // bram
     line_t mem  [SETS-1:0][WAYS-1:0];
     meta_t meta [SETS-1:0][WAYS-1:0];
 
@@ -49,7 +52,7 @@ module set_cache #(
     A separate clr_in_prog ff was removed; CACHE_CLR was added to state.
     This saves an ff at the expense of more comb logic (minor)
     */
-    uint curr_clr_addr;  // set_idx of the set being cleared
+    logic [$clog2(SETS)-1:0] curr_clr_addr;  // set_idx of the set being cleared
 
 
     // sigs for writes to cache
@@ -86,10 +89,16 @@ module set_cache #(
             unique case (state)
                 CACHE_IDLE : begin
                     if (bus.r_en || bus.w_en) begin
-                        state  <= CACHE_TAG_CMP;
+                        state  <= CACHE_READ;
+
                         cmp_in_line <= mem [bus.set_idx];
                         cmp_in_meta <= meta[bus.set_idx];
                     end
+                end
+
+                /* crit path broken down, since tag_cmp is massive... */
+                CACHE_READ : begin
+                    state <= CACHE_TAG_CMP;
                 end
 
                 CACHE_TAG_CMP : begin
@@ -164,11 +173,17 @@ module set_cache #(
     */
     way_idx_t victim_way;
 
-    tree_plru u_tree_plru (
-        .clk (clk),
-        .rst (rst),
+    tree_plru #(
+        .SETS      (SETS),
+        .WAYS      (WAYS),
+        .WAY_LOG_W (WAY_LOG_W)
+    )
+    u_tree_plru (
+        .clk          (clk),
+        .rst          (rst),
 
-        .bus (bus),
+        .set_idx      (bus.set_idx),
+        .ctrl         ({bus.hit, bus.fill_req, bus.ready}),
 
         .hit_way      (hit_way),
         .cmp_in_valid (cmp_in_valid),

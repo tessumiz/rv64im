@@ -1,5 +1,4 @@
 import mem_pkg::*;
-import zicsr_pkg::*;
 import defs_pkg::uint;
 
 
@@ -10,9 +9,8 @@ import defs_pkg::uint;
 the majority of access (especially from sv48/57). Maybe parametrize
 it to lvl1/lvl2 later if thrashing becomes an issue (very unlikely).
 
-As this is a basic ff array, reads are async
-
-set_cache/tree_plru is too heavy to be used here...
+set_cache is too generic and heavy to be used here. tree_plru would
+be an overkill here in terms of gate complexity; poor ROI.
 */
 
 module pwc (
@@ -20,16 +18,18 @@ module pwc (
     input  logic        rst,
 
     input  pwc_tag_t    pwc_in,
-    output logic        hit,
-    output logic [43:0] lvl1_root,
 
     input  logic        w_en,
-    input  logic [43:0] w_root
+    input  logic [43:0] w_root,
+
+    output logic        hit,
+    output logic [43:0] lvl1_root
 );
 
+    // ff
     pwc_data_t   mem [15:0];
     logic        cmp_out [15:0];
-    pwc_tag_t    masked_tag;
+
 
     // bit plru
     logic [15:0] touched;  // ff
@@ -38,33 +38,26 @@ module pwc (
     logic [3:0]  hit_idx;
 
     always_comb begin
-        masked_tag = pwc_in;
-
-        // 8, 9, 10
-        unique case ({2'b10, pwc_in.mode})
-            SATP_SV39: begin
-                masked_tag.vpn4 = 0;
-                masked_tag.vpn3 = 0;
-            end
-
-            SATP_SV48:
-                masked_tag.vpn4 = 0;
-            
-            SATP_SV57: ;
-        endcase
-
         hit       = 0;
         lvl1_root = 0;
         hit_idx   = 0;
         
         for (int i = 0; i < 16; i++) begin
-            cmp_out[i] = mem[i].valid && (mem[i].tag == masked_tag);
+            /*
+            We don't have to mask vpn as the sig-extended data is what gets stored in the
+            cache in the first place, which guarantees correctness by default.
+            */
+            automatic pwc_tag_t asid_mask = '{
+                asid:    mem[i].tag.g ? 0 : '1,
+                default: '1
+            };
 
-            if (cmp_out[i]) begin
-                lvl1_root = mem[i].lvl1_root;
-                hit       = 1;
-                hit_idx   = i[3:0];
-            end
+            cmp_out[i] = mem[i].valid && ~|((mem[i].tag ^ pwc_in) & asid_mask);
+
+            // Fix; explicit one-hot
+            hit       |= cmp_out[i];
+            lvl1_root |= { $bits(lvl1_root){cmp_out[i]} } & mem[i].lvl1_root;
+            hit_idx   |= { $bits(hit_idx){cmp_out[i]} }   & i[3:0];
         end
 
 
@@ -104,7 +97,7 @@ module pwc (
             
             if (w_en) begin
                 mem[victim_idx].valid     <= 1;
-                mem[victim_idx].tag       <= masked_tag;
+                mem[victim_idx].tag       <= pwc_in;
                 mem[victim_idx].lvl1_root <= w_root;
             end
         end

@@ -195,16 +195,7 @@ module csr_file(
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            mstatus <= 0;
-            mtvec   <= 0;
-            mepc    <= 0;
-            mcause  <= 0;
-            mtval   <= 0;
-            mie     <= 0;
-
-            sepc    <= 0;
-            stvec   <= 0;
-
+            mstatus  <= MSTATUS_RST;
             priv_lvl <= PRIV_M;
         end
         else begin
