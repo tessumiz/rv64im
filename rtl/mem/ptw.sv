@@ -16,6 +16,8 @@ module ptw(
 
     output logic        ready,
     output logic [43:0] ppn_out,
+    output logic        is_superpage,
+    output logic [2:0]  superpage_mask,
     output logic page_fault, access_fault
 );
 
@@ -154,6 +156,15 @@ module ptw(
             )) |
 
             (!is_leaf & (pte.d | pte.a | pte.u | (level == PTW_LVL0)))
+        );
+
+        is_superpage = level != PTW_LVL0;
+
+        superpage_mask = (
+            level == PTW_LVL4 ? PETA_PAGE :
+            level == PTW_LVL3 ? TERA_PAGE :
+            level == PTW_LVL2 ? GIGA_PAGE :
+                                MEGA_PAGE
         );
 
         access_fault = (ram_bus.ready && ram_bus.access_fault);

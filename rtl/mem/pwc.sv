@@ -57,16 +57,14 @@ module pwc (
             // Fix; explicit one-hot
             hit       |= cmp_out[i];
             lvl1_root |= { $bits(lvl1_root){cmp_out[i]} } & mem[i].lvl1_root;
-            hit_idx   |= { $bits(hit_idx){cmp_out[i]} }   & i[3:0];
+            hit_idx   |= { $bits(hit_idx){cmp_out[i]} }   & i[$bits(hit_idx)-1:0];
         end
 
 
         victim_idx  = 0;  // default scapegoat idx 0
         for (uint i = 0; i < 16; i++) begin
-            if (!mem[i].valid || !touched[i]) begin
+            if (!mem[i].valid || !touched[i])
                 victim_idx  = i[3:0];  // uint truncate, nothing special...
-                break;
-            end
         end
         
         nxt_touched = touched;
@@ -94,7 +92,7 @@ module pwc (
             if (hit || w_en) begin
                 touched <= nxt_touched;
             end
-            
+
             if (w_en) begin
                 mem[victim_idx].valid     <= 1;
                 mem[victim_idx].tag       <= pwc_in;

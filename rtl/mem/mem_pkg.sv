@@ -32,7 +32,7 @@ package mem_pkg;
 
         // var
         ITLB_SETS      = ITLB_ENTRIES / ITLB_WAYS,
-        ITLB_BLK_OFF_W = $clog2(ITLB_ENTRIES / ITLB_WAYS);  // block offset
+        ITLB_BLK_OFF_W = $clog2(ITLB_SETS);  // block offset
 
 
     typedef struct packed {
@@ -84,13 +84,18 @@ package mem_pkg;
 
     typedef struct packed {
         logic [43:0] ppn;
-        logic        u;
+
+        /* these must not be stored as the tag, as that would imply the checks happening in the first cycle;
+        wider logic plus worse timing. An extra cycle of latency for faults is entirely tolerable */
+
+        logic        u, g;  // note; I'm assuming the 'g' will get eliminated as dead code in parts where I don't need it; used for convenience.
         logic        r, w, x;
         logic        a, d;
     } dtlb_data_t;
 
 
     // DCACHE (NOTE: I'm not unifying I/D data structs; future proofing for some obscure reason)
+    // I've deliberately used an invariant/variant split here
     localparam
         DCACHE_LINE_SIZE = 64 * 8,  // Don't change this
         DCACHE_BLK_OFF_W = 12,
@@ -156,7 +161,8 @@ package mem_pkg;
     } set_cache_fsm_t;
 
     typedef enum logic [2:0] {
-        TLB_IDLE, TLB_READ_AND_TAG_CMP, TLB_FAULT_CHECK, TLB_FETCH_PAGE, TLB_WRITE_PAGE, TLB_EVICT
+        TLB_IDLE, TLB_READ_AND_TAG_CMP, TLB_FAULT_CHECK, TLB_FETCH_PAGE,
+        TLB_WRITE_PAGE, TLB_EVICT_PAGE
     } set_tlb_fsm_t;
 
     typedef enum logic [2:0] {
@@ -166,5 +172,9 @@ package mem_pkg;
     typedef enum logic [2:0] {
         PTW_LVL4, PTW_LVL3, PTW_LVL2, PTW_LVL1, PTW_LVL0
     } ptw_lvl_t;
+
+    typedef enum logic [2:0] {
+        MEGA_PAGE = 3'b000, GIGA_PAGE = 3'b001, TERA_PAGE = 3'b011, PETA_PAGE = 3'b111
+    } superpage_mask_t;
 
 endpackage

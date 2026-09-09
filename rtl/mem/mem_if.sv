@@ -1,4 +1,5 @@
 import defs_pkg::uint;
+import mem_pkg::*;
 
 
 /*
@@ -102,19 +103,27 @@ interface tlb_if #(
     localparam uint IDX_W      = uint'($clog2(SETS));
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
 
-    logic  [IDX_W-1:0] set_idx;
-    TAG_T  tag;
+    logic        valid;
+    TAG_T        tag;
+    logic [IDX_W-1:0] set_idx;
+    logic        u, r, w, x;
+    mmu_ctx_t    mmu_ctx;
 
-    logic  valid;
-    DATA_T data;
 
-    DATA_T fetched_page;
-    logic  page_fetched;
+    logic [43:0] ppn_out;
+
+    // whatever changes can be made from the master-to-tlb side; include any which was left out...
+    // consider hiding this latency with buffers later...
+    logic  evict_page_update;
+    // vpn_t  evict_page_vaddr;  // let the ifu/dcu handle this
+    logic  evict_done;
+
     logic  page_req;
+    logic  page_fetched;
+    DATA_T fetched_page;
+    logic  fetched_is_super;
+    superpage_mask_t fetched_super_mask;
     logic  fetch_fault;
-
-    logic  evict_page_wb;  // D gets set
-    logic  [IDX_W-1:0] evict_set_idx;
 
     logic  hit;
     logic  busy;
@@ -123,13 +132,15 @@ interface tlb_if #(
     logic  page_fault;
 
     modport master (
-        output set_idx, tag, valid, page_fetched, fetched_page, fetch_fault,
-        input  data, hit, ready, page_req, busy, page_fault, evict_page_wb, evict_set_idx
+        output set_idx, tag, valid, page_fetched, fetched_page, fetched_super_mask, fetched_is_super, fetch_fault,
+               u, r, w, x, mmu_ctx,
+        input  ppn_out, hit, ready, page_req, busy, page_fault, evict_page_update, evict_done
     );
 
     modport cache (
-        input  set_idx, tag, valid, page_fetched, fetched_page, fetch_fault,
-        output data, hit, ready, page_req, busy, page_fault, evict_page_wb, evict_set_idx
+        input  set_idx, tag, valid, page_fetched, fetched_page, fetched_super_mask, fetched_is_super, fetch_fault,
+               u, r, w, x, mmu_ctx,
+        output ppn_out, hit, ready, page_req, busy, page_fault, evict_page_update, evict_done
     );
 endinterface
 
