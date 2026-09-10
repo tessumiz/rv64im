@@ -9,7 +9,7 @@ module ptw(
 
     input logic     valid,
     input vpn_t     vaddr,
-    input logic     w, x, u,
+    input logic     w, x, u,  // set w=1 for mark_dirty evict op from tlb
     input mmu_ctx_t mmu_ctx,
 
     gen_mem_if.master   ram_bus,

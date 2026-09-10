@@ -80,7 +80,13 @@ module tlb (
     super_line_t  super_hit_line;
     logic         super_hit;
     logic [SUPERPAGE_CAM_LOGW-1:0] super_hit_idx;
-    logic [44:0]  super_mask;
+
+    logic [2:0]   hit_vmask;
+    logic [43:0]  super_mask;
+
+    assign hit_vmask  = super_hit_line.vpn_mask;
+    assign super_mask = { 8'b0, {9{hit_vmask[2]}}, {9{hit_vmask[1]}}, {9{hit_vmask[0]}}, 9'h1FF };
+
 
     // superpage CAM uses a bit-plru
     logic [SUPERPAGE_CAM_SIZE-1:0] super_touched;
@@ -106,10 +112,6 @@ module tlb (
             state         <= TLB_IDLE;
         end
         else begin
-            if (write_page) begin
-                mem[bus.set_idx][victim_way].valid <= 1;
-            end
-
             unique case (state)
                 TLB_IDLE : begin
                     if (bus.valid) 
@@ -166,6 +168,7 @@ module tlb (
         norm_hit_line  = 0;
         norm_hit_way   = 0;
         super_hit_line = 0;
+        super_hit_idx  = 0;
 
 
         // norm
@@ -194,7 +197,7 @@ module tlb (
             automatic super_line_t super_line = superpage_mem[i];
             automatic vpn_t super_way_cmp = (super_line.vpn ~^ full_vpn);
 
-            automatic logic [2:0] _super_mask = super_line.mask;
+            automatic logic [2:0] _super_mask = super_line.vpn_mask;
             automatic logic super_way_cmp_eq = (
                 (&super_way_cmp.vpn1 | _super_mask[0]) &
                 (&super_way_cmp.vpn2 | _super_mask[1]) &
@@ -281,12 +284,10 @@ module tlb (
             ((bus.u & !read_data.u) | (!bus.u & read_data.u & (!bus.mmu_ctx.SUM | bus.x)))
         );
 
-        bus.evict_page_update = (state == TLB_FAULT_CHECK && !bus.page_fault) && bus.w && !read_data.d;
+        bus.evict_page_update = (state == TLB_FAULT_CHECK && !bus.page_fault) && bus.w && !read_data.d && hit;
 
-        super_mask  = super_hit_line.vpn_mask;
-        super_mask  = { 9'b0, {9{super_mask[2]}}, {9{super_mask[1]}}, {9{super_mask[0]}}, 9'b0 };
-
-        bus.ppn_out = (read_data.ppn);
+        bus.ppn_out = super_hit ? ((read_data.ppn & ~super_mask) | (full_vpn[43:0] & super_mask)) :
+                      read_data.ppn;
 
         bus.busy  = (state != TLB_IDLE);
         bus.ready = (state == TLB_IDLE && bus.valid && hit) ||
@@ -300,7 +301,10 @@ module tlb (
                 super_touched <= super_nxt_touched;
             end
             else if (bus.evict_page_update) begin
-                mem[bus.set_idx][victim_way].tag.dirty <= 1;
+                if (super_hit)
+                    superpage_mem[super_hit_idx].data.d   <= 1;
+                else
+                    mem[bus.set_idx][norm_hit_way].data.d <= 1;
             end
             else if (write_page) begin
                 if (!bus.fetched_is_super) begin
@@ -319,6 +323,8 @@ module tlb (
                         g: bus.tag.g,
                         data: bus.fetched_page
                     };
+
+                    super_touched <= super_touched | (1 << super_victim_idx);
                 end
 
                 /*

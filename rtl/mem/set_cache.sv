@@ -5,6 +5,7 @@ import defs_pkg::uint;
 module set_cache (
     input  logic clk,
     input  logic rst,
+    input  logic flush,  // triggers wb fsm
 
     set_cache_if.cache bus
 );
