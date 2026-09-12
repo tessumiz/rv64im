@@ -27,6 +27,12 @@ After adding superpages, wholly different:
 Regular pages use a set assoc CAM, while superpages use a fully assoc CAM. They're
 parallely queried and the output is muxed. Norm uses a tree plru, while super uses
 a bit plru.
+
+Storing both together leads to the aliasing issue; superpages always alias to set 0,
+increasing conflict misses.
+
+NOTE: flush is unnecessary here. Unlike caches, the D bit in the pte must be in sync
+with the tlb (specs)
 */
 
 
@@ -108,13 +114,14 @@ module tlb (
     always_ff @(posedge clk) begin
         if (rst) begin
             mem           <= '0;
+            superpage_mem <= '0;
             super_touched <= '0;
             state         <= TLB_IDLE;
         end
         else begin
             unique case (state)
                 TLB_IDLE : begin
-                    if (bus.valid) 
+                    if (bus.req.valid) 
                         state <= TLB_READ_AND_TAG_CMP;
                 end
 
@@ -127,10 +134,10 @@ module tlb (
                 end
 
                 TLB_FETCH_PAGE : begin
-                    if (bus.fetch_fault)
+                    if (bus.mem_rsp.fetch_fault)
                         state <= TLB_IDLE;
 
-                    else if (bus.page_fetched)
+                    else if (bus.mem_rsp.page_fetched)
                         state <= TLB_WRITE_PAGE;
                 end
 
@@ -139,10 +146,10 @@ module tlb (
                 end
 
                 TLB_FAULT_CHECK : begin
-                    if (bus.page_fault)
+                    if (bus.rsp.page_fault)
                         state <= TLB_IDLE;
 
-                    else if (bus.evict_page_update)
+                    else if (bus.mem_req.evict_page_wb)
                         state <= TLB_EVICT_PAGE;
 
                     else
@@ -150,7 +157,7 @@ module tlb (
                 end
 
                 TLB_EVICT_PAGE : begin
-                    if (bus.evict_done)
+                    if (bus.mem_rsp.evict_done)
                         state <= TLB_IDLE;
                 end
             endcase
@@ -160,7 +167,7 @@ module tlb (
 
     always_comb begin
         // async read
-        cmp_in_line = mem[bus.set_idx];
+        cmp_in_line = mem[bus.req.set_idx];
 
         cmp_out        = 0;
         super_cmp_out  = 0;
@@ -177,10 +184,10 @@ module tlb (
 
             cmp_out[i] = (
                 curr_line.valid &&
-                curr_line.tag.vpn_upper == bus.tag.vpn_upper &&
+                curr_line.tag.vpn_upper == bus.req.tag.vpn_upper &&
 
                 // gated asid check
-                (curr_line.tag.g || curr_line.tag.asid == bus.tag.asid)
+                (curr_line.tag.g || curr_line.tag.asid == bus.req.tag.asid)
             );
 
             cmp_in_valid[i] = curr_line.valid;
@@ -190,7 +197,7 @@ module tlb (
         end
 
 
-        full_vpn = { bus.tag.vpn_upper, bus.set_idx };  // could optimize this, but I'll let the synth do it for me...
+        full_vpn = { bus.req.tag.vpn_upper, bus.req.set_idx };  // could optimize this, but I'll let the synth do it for me...
 
         // super
         for (uint i = 0; i < SUPERPAGE_CAM_SIZE; i++) begin
@@ -208,19 +215,19 @@ module tlb (
             super_cmp_out[i] = (
                 super_line.valid &&
                 super_way_cmp_eq &&
-                (super_line.g || super_line.asid == bus.tag.asid)
+                (super_line.g || super_line.asid == bus.req.tag.asid)
             );
 
             super_hit_line |= ( super_line & {$bits(super_line_t){super_cmp_out[i]}} );
             super_hit_idx  |= i[SUPERPAGE_CAM_LOGW-1:0] & { SUPERPAGE_CAM_LOGW{super_cmp_out[i]} };
         end
 
-        norm_hit  = |cmp_out;
-        super_hit = |super_cmp_out;
+        norm_hit    = |cmp_out;
+        super_hit   = |super_cmp_out;
 
-        hit       = norm_hit | super_hit;
-        miss      = !hit;
-        bus.hit   = hit;
+        hit         = norm_hit | super_hit;
+        miss        = !hit;
+        bus.rsp.hit = hit;
     end
 
 
@@ -233,8 +240,8 @@ module tlb (
         .clk          (clk),
         .rst          (rst),
 
-        .set_idx      (bus.set_idx),
-        .ctrl         ({norm_hit, bus.page_req, bus.ready}),
+        .set_idx      (bus.req.set_idx),
+        .ctrl         ({norm_hit, bus.mem_req.page_req, bus.rsp.ready}),
 
         .hit_way      (norm_hit_way),
         .cmp_in_valid (cmp_in_valid),
@@ -243,7 +250,7 @@ module tlb (
     );
 
 
-    // superpage b-plru
+    // superpage b-plru (will go for a cheaper one (FIFO) if found enough)
     always_comb begin
         super_victim_idx = 0;  // scapegoat
 
@@ -270,73 +277,66 @@ module tlb (
 
     always_comb begin
         read_data  = hit ? (super_hit ? super_hit_line.data : norm_hit_line.data) :
-                     bus.fetched_page;
+                     bus.mem_rsp.fetched_page;
 
-        write_page = (state == TLB_FETCH_PAGE && bus.page_fetched);
+        write_page = (state == TLB_FETCH_PAGE && bus.mem_rsp.page_fetched);
 
 
-        bus.page_req = (state == TLB_IDLE) && bus.valid && miss;
+        bus.mem_req.page_req = (state == TLB_IDLE) && bus.req.valid && miss;
 
-        bus.page_fault = (state == TLB_FAULT_CHECK) && (
-            ( bus.w & !read_data.w) |
-            ( bus.x & !read_data.x) |
-            ( bus.r & !read_data.r & !(read_data.x & bus.mmu_ctx.MXR)) |
-            ((bus.u & !read_data.u) | (!bus.u & read_data.u & (!bus.mmu_ctx.SUM | bus.x)))
+        bus.rsp.page_fault = (state == TLB_FAULT_CHECK) && (
+            ( bus.req.w & !read_data.w) |
+            ( bus.req.x & !read_data.x) |
+            ( bus.req.r & !read_data.r & !(read_data.x & bus.req.mmu_ctx.MXR)) |
+            ((bus.req.u & !read_data.u) | (!bus.req.u & read_data.u & (!bus.req.mmu_ctx.SUM | bus.req.x)))
         );
 
-        bus.evict_page_update = (state == TLB_FAULT_CHECK && !bus.page_fault) && bus.w && !read_data.d && hit;
+        bus.mem_req.evict_page_wb = (state == TLB_FAULT_CHECK && !bus.rsp.page_fault) &&
+                                    (bus.req.w && !read_data.d && hit);
 
-        bus.ppn_out = super_hit ? ((read_data.ppn & ~super_mask) | (full_vpn[43:0] & super_mask)) :
-                      read_data.ppn;
+        bus.rsp.ppn_out = super_hit ? ((read_data.ppn & ~super_mask) | (full_vpn[43:0] & super_mask)) :
+                          read_data.ppn;
 
-        bus.busy  = (state != TLB_IDLE);
-        bus.ready = (state == TLB_IDLE && bus.valid && hit) ||
-                    (state == TLB_WRITE_PAGE) ||
-                    (state == TLB_EVICT_PAGE && bus.evict_done);
+
+        bus.rsp.busy  = (state != TLB_IDLE);
+
+        // ready here means stage 1 is done; stage 2 is checking for faults
+        bus.rsp.ready = (state == TLB_IDLE && bus.req.valid && hit) ||
+                        (state == TLB_WRITE_PAGE) ||
+                        (state == TLB_EVICT_PAGE && bus.mem_rsp.evict_done);
     end
 
     always_ff @(posedge clk) begin
         if (!rst) begin
-            if (bus.ready && super_hit) begin
+            if (bus.rsp.ready && super_hit) begin
                 super_touched <= super_nxt_touched;
             end
-            else if (bus.evict_page_update) begin
+            else if (bus.mem_req.evict_page_wb) begin
                 if (super_hit)
-                    superpage_mem[super_hit_idx].data.d   <= 1;
+                    superpage_mem[super_hit_idx].data.d       <= 1;
                 else
-                    mem[bus.set_idx][norm_hit_way].data.d <= 1;
+                    mem[bus.req.set_idx][norm_hit_way].data.d <= 1;
             end
             else if (write_page) begin
-                if (!bus.fetched_is_super) begin
-                    mem[bus.set_idx][victim_way] <= '{
+                if (!bus.mem_rsp.fetched_is_super) begin
+                    mem[bus.req.set_idx][victim_way] <= '{
                         valid: 1,
-                        tag: { bus.tag.vpn_upper, bus.tag.asid, bus.fetched_page.g },
-                        data: bus.fetched_page
+                        tag: { bus.req.tag.vpn_upper, bus.req.tag.asid, bus.mem_rsp.fetched_page.g },
+                        data: bus.mem_rsp.fetched_page
                     };
                 end
                 else begin
                     superpage_mem[super_victim_idx] <= '{
                         valid: 1,
                         vpn: full_vpn,
-                        vpn_mask: bus.fetched_super_mask,
-                        asid: bus.tag.asid,
-                        g: bus.tag.g,
-                        data: bus.fetched_page
+                        vpn_mask: bus.mem_rsp.fetched_super_mask,
+                        asid: bus.req.tag.asid,
+                        g: bus.req.tag.g,
+                        data: bus.mem_rsp.fetched_page
                     };
 
                     super_touched <= super_touched | (1 << super_victim_idx);
                 end
-
-                /*
-                typedef struct packed {
-                    logic        valid;
-                    vpn_t        vpn;       // ignore vpn0
-                    logic [2:0]  vpn_mask;  // 000 = mega, 001 = giga, 011 = terra, 111 = peta
-                    logic [15:0] asid;
-                    logic        g;
-                    DATA_T       data;
-                } super_line_t;
-                */
             end
         end
     end

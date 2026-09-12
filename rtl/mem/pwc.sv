@@ -11,6 +11,9 @@ it to lvl1/lvl2 later if thrashing becomes an issue (very unlikely).
 
 set_cache is too generic and heavy to be used here. tree_plru would
 be an overkill here in terms of gate complexity; poor ROI.
+
+TODO; need to think of the ROI of supporting superpages of various
+levels for various modes.
 */
 
 module pwc (
@@ -31,7 +34,7 @@ module pwc (
     logic        cmp_out [15:0];
 
 
-    // bit plru
+    // bit plru (considering an even simpler FIFO now...)
     logic [15:0] touched;  // ff
     logic [15:0] nxt_touched;
     logic [3:0]  victim_idx;

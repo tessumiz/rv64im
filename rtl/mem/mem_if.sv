@@ -46,7 +46,6 @@ interface gen_mem_if #(
 endinterface
 
 
-
 interface set_cache_if #(
     parameter type  TAG_T,
     parameter type  DATA_T,
@@ -57,39 +56,48 @@ interface set_cache_if #(
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
     localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
 
-    logic  [IDX_W-1:0] set_idx;
-    TAG_T  tag;
+    typedef struct packed {
+        logic [IDX_W-1:0] set_idx;
+        TAG_T             tag;
+        logic             r_en;
+        logic             w_en;
+        DATA_T            w_data;
+        logic [W_MASK_LEN-1:0] w_mask;
+    } req_t;
 
-    logic  r_en;
-    DATA_T r_data;
+    typedef struct packed {
+        DATA_T r_data;
+        logic  hit;
+        logic  busy;
+        logic  ready;
+    } rsp_t;
 
-    logic  w_en;
-    DATA_T w_data;
+    typedef struct packed {
+        logic  evict_wb;
+        TAG_T  evict_tag;
+        DATA_T evicted_data;
+        logic  fill_req;
+    } mem_req_t;
 
-    // byte-mask
-    logic [W_MASK_LEN-1:0] w_mask;
+    typedef struct packed {
+        logic  fill_en;
+        DATA_T fill_data; // at req_master's set_idx
+        logic  evict_complete;
+    } mem_rsp_t;
 
-    logic  evict_wb;
-    TAG_T  evict_tag;
-    DATA_T evicted_data;
-    logic  evict_complete;
-
-    logic  fill_en;
-    DATA_T fill_data;  // at req_master's set_idx
-    logic  fill_req;
-
-    logic  hit;
-    logic  busy;
-    logic  ready;
+    req_t     req;
+    rsp_t     rsp;
+    mem_req_t mem_req;
+    mem_rsp_t mem_rsp;
 
     modport master (
-        output set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
-        input  r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req, busy
+        output req, mem_rsp,
+        input  rsp, mem_req
     );
 
     modport cache (
-        input  set_idx, tag, r_en, w_en, w_data, fill_en, fill_data, w_mask, evict_complete,
-        output r_data, hit, ready, evict_wb, evict_tag, evicted_data, fill_req, busy
+        input  req, mem_rsp,
+        output rsp, mem_req
     );
 endinterface
 
@@ -103,44 +111,53 @@ interface tlb_if #(
     localparam uint IDX_W      = uint'($clog2(SETS));
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
 
-    logic        valid;
-    TAG_T        tag;
-    logic [IDX_W-1:0] set_idx;
-    logic        u, r, w, x;
-    mmu_ctx_t    mmu_ctx;
+    typedef struct packed {
+        logic             valid;
+        logic [IDX_W-1:0] set_idx;
+        TAG_T             tag;
+        logic             u, r, w, x;
+        mmu_ctx_t         mmu_ctx;
+    } req_t;
 
+    typedef struct packed {
+        logic [43:0] ppn_out;
+        logic        hit;
+        logic        busy;
+        logic        ready;
+        logic        page_fault;
+    } rsp_t;
 
-    logic [43:0] ppn_out;
+    typedef struct packed {
+        logic  page_req;
 
-    // whatever changes can be made from the master-to-tlb side; include any which was left out...
-    // consider hiding this latency with buffers later...
-    logic  evict_page_update;
-    // vpn_t  evict_page_vaddr;  // let the ifu/dcu handle this
-    logic  evict_done;
+        // whatever changes can be made from the master-to-tlb side; include any which was left out...
+        // consider hiding this latency with buffers later...
+        logic  evict_page_wb;
+        // vpn_t  evict_page_vaddr;  // let the ifu/dcu handle this
+    } mem_req_t;
 
-    logic  page_req;
-    logic  page_fetched;
-    DATA_T fetched_page;
-    logic  fetched_is_super;
-    superpage_mask_t fetched_super_mask;
-    logic  fetch_fault;
+    typedef struct packed {
+        logic            page_fetched;
+        DATA_T           fetched_page;
+        logic            fetched_is_super;
+        superpage_mask_t fetched_super_mask;
+        logic            fetch_fault;
+        logic            evict_done;
+    } mem_rsp_t;
 
-    logic  hit;
-    logic  busy;
-    logic  ready;
-
-    logic  page_fault;
+    req_t     req;
+    rsp_t     rsp;
+    mem_req_t mem_req;
+    mem_rsp_t mem_rsp;
 
     modport master (
-        output set_idx, tag, valid, page_fetched, fetched_page, fetched_super_mask, fetched_is_super, fetch_fault,
-               u, r, w, x, mmu_ctx,
-        input  ppn_out, hit, ready, page_req, busy, page_fault, evict_page_update, evict_done
+        output req, mem_rsp,
+        input  rsp, mem_req
     );
 
     modport cache (
-        input  set_idx, tag, valid, page_fetched, fetched_page, fetched_super_mask, fetched_is_super, fetch_fault,
-               u, r, w, x, mmu_ctx,
-        output ppn_out, hit, ready, page_req, busy, page_fault, evict_page_update, evict_done
+        input  req, mem_rsp,
+        output rsp, mem_req
     );
 endinterface
 

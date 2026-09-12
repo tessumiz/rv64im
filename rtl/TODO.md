@@ -1,39 +1,27 @@
 ## BUGS / INCOMPLETE STUFF
-- [ ] tlb.sv has been implemented rather quick and fragile; scrutinize it
-
-- [ ] make tlb as well as pwc support superpages
-
-- [ ] integrate eviction wb from tlb on ptw
-
-- [ ] tweak the invariant parameteres of every cache/tlb (including pwc and plrus)
-
-- [ ] separate rst from flush; extend the fsms to wb all pending dirty data
+- [ ] (later) have a review of all mem modules (not just correctness...)
 
 
 ## IMMEDIATE
-- [ ] total interface overhaul; use structs for req/rsp rather than be forced to use
-      unreadable prefix macros everywhere to set intfs...
-
-- [ ] making ifu + dcu + PMA, connecting ifu + dcu to the ptw (using an arbiter),
-      handling faults (check NEXT_DRAFT.md)
+- [ ] tweak the invariant parameteres of every cache/tlb (including pwc and plrus)
 
 - [ ] synth bugs in bram access; flatten ways using a for (or generate)  (???)
 
+- [ ] fixing muldiv and filling in the mul and div circuits
+
+- [ ] ifu/dcu/ram-arbiter
+
+- [ ] basic bimodal br-pred
+
 
 ## PENDING
-- [ ] crossbar and peripherals
-
-- [ ] fixing imuldiv
+- [ ] basic interconnect, mmio for key inputs
 
 
 ## LATER
 - [ ] reducing interrupt latency on bubbles / mem ops; early exits and fwd-ing pc
 
-- [ ] br-pred and DMA
-
-- [ ] filling in the mul and div circuits
-
-- [ ] separate clocks for the appropriate units
+- [ ] gshare and DMA
 
 - [ ] document that our OS is not going to randomize page alloc; hence keeping the 16-CAM
       pwc reasonable. Maybe even tweak it down to 8-CAM...
@@ -44,7 +32,10 @@
       a cycle for smaller cmp_in ffs as well as reducing power, a really good choice.
       Making this parametric would be hard I suppose...
 
+- [ ] CSR fwd-ing (which means haz-det too)
+
+- [ ] C extension
+
 
 ## ALMOST NEVER
-- [ ] CSR fwd-ing (which means haz-det too)
-- [ ] C and F extensions
+- [ ] F extension

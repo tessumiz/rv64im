@@ -156,7 +156,7 @@ package mem_pkg;
 
     // FSMs
     typedef enum logic [3:0] {
-        CACHE_CLR, CACHE_IDLE, CACHE_READ, CACHE_TAG_CMP, CACHE_EVICT,
+        CACHE_CLR, CACHE_IDLE, CACHE_READ, CACHE_TAG_CMP, CACHE_EVICT, CACHE_FLUSH_DIRTY_SET,
         CACHE_WRITE, CACHE_REQ_FILL, CACHE_R_FILL, CACHE_SUBWORD_W_FILL
     } set_cache_fsm_t;
 

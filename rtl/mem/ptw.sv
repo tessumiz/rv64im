@@ -70,7 +70,7 @@ module ptw(
 
         .w_en      (
             (state == PTW_CHECK_PTE) &&
-            (level == PTW_LVL2) &&
+            (level == PTW_LVL2 && mode != SATP_SV39) &&
             !(page_fault || is_leaf)
         ),
         .w_root    (pte_ppn)
