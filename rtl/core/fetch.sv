@@ -46,7 +46,7 @@ module fetch (
     ) icache_bus ();
 
     always_comb begin
-        icache_bus.req.r_en   = !stall;
+        icache_bus.req.r_en   = !stall || icache_bus.rsp.busy;
         icache_bus.req.w_en   =  0; 
         icache_bus.req.w_mask = '0;
         icache_bus.req.w_data = '0;
@@ -73,7 +73,7 @@ module fetch (
         //     take_br     ? br_targ     :
         //     pc + 4;
 
-        nxt_pc = take_br ? br_targ : pc + 4;
+        nxt_pc = rst ? 64'h8000_0000 : (take_br ? br_targ : pc + 4);
 
         out.pc = pc;
         out.ins = icache_bus.rsp.r_data[ pc[5:2] * 32 +: 32 ];
@@ -89,11 +89,11 @@ module fetch (
 
     assign icache_stall = !icache_bus.rsp.ready || icache_bus.rsp.busy;
 
-    gen_reg #(.T(logic [63:0]), .RST_VAL(64'h8000_0000))
+    gen_reg #(.T(logic [63:0]))
     u_pc (
         .clk (clk),
-        .en  (!(stall || icache_stall)), 
-        .clr (rst),
+        .en  (rst || !(stall || icache_stall)), 
+        .clr (0),
         .d   (nxt_pc),
         .q   (pc)
     );

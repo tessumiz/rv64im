@@ -49,6 +49,10 @@ module set_cache (
     assign is_subword_w = !(&bus.req.w_mask);
 
 
+    // latching req sigs
+    logic req_r_en, req_w_en;
+
+
     // sigs for writes to cache
     logic       norm_w;
     logic       write;
@@ -132,6 +136,9 @@ module set_cache (
                     else if (bus.req.r_en || bus.req.w_en) begin
                         state  <= CACHE_READ;
 
+                        req_r_en <= bus.req.r_en;
+                        req_w_en <= bus.req.w_en;
+
                         curr_line <= mem [bus.req.set_idx];
                         curr_meta <= meta[bus.req.set_idx];
                     end
@@ -145,7 +152,7 @@ module set_cache (
                 CACHE_TAG_CMP : begin
                     if (bus.mem_req.evict_wb)
                         state <= CACHE_EVICT;
-                    else if (bus.req.r_en)
+                    else if (req_r_en)
                         state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
                     else
                         state <= (is_subword_w && miss) ? CACHE_REQ_FILL : CACHE_WRITE;
@@ -154,7 +161,7 @@ module set_cache (
                 CACHE_EVICT : begin
                     // handle RAM errors later; for now, assume evict always succeeds
                     if (bus.mem_rsp.evict_complete) begin
-                        if (bus.req.r_en)
+                        if (req_r_en)
                             state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
 
                         else
@@ -186,7 +193,7 @@ module set_cache (
 
                 CACHE_REQ_FILL : begin
                     if (bus.mem_rsp.fill_en)
-                        state <= bus.req.r_en ? CACHE_R_FILL : CACHE_SUBWORD_W_FILL;
+                        state <= req_r_en ? CACHE_R_FILL : CACHE_SUBWORD_W_FILL;
                 end
 
                 CACHE_SUBWORD_W_FILL : begin
@@ -271,9 +278,8 @@ module set_cache (
         bus.rsp.r_data = hit ? hit_line.data : bus.mem_rsp.fill_data;
 
         bus.mem_req.fill_req =
-            (state == CACHE_TAG_CMP) && miss && (
-            (bus.req.r_en || (bus.req.w_en && is_subword_w))
-        );
+            ((state == CACHE_TAG_CMP) && miss && (req_r_en || (req_w_en && is_subword_w))) ||
+            (state == CACHE_REQ_FILL);
 
         bus.mem_req.evict_wb =
             (state == CACHE_TAG_CMP && miss && victim_meta.valid && victim_meta.dirty) ||
@@ -284,7 +290,7 @@ module set_cache (
         bus.mem_req.evicted_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_line.data : victim_line.data;
 
         norm_w =
-            (state == CACHE_TAG_CMP && bus.req.w_en && !(miss && is_subword_w)) ||
+            (state == CACHE_TAG_CMP && req_w_en && !(miss && is_subword_w)) ||
             (state == CACHE_SUBWORD_W_FILL);
 
         write  = norm_w || (state == CACHE_REQ_FILL && bus.mem_rsp.fill_en);
@@ -306,7 +312,7 @@ module set_cache (
 
         bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;
 
-        bus.rsp.ready = (state == CACHE_TAG_CMP && bus.req.r_en && hit) ||
+        bus.rsp.ready = (state == CACHE_TAG_CMP && req_r_en && hit) ||
                         (state == CACHE_R_FILL || state == CACHE_WRITE);
     end
 

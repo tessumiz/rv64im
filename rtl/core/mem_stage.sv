@@ -84,7 +84,7 @@ module mem_stage (
         is_mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;
 
         // hardcoded PMA; synths to a redn-OR tree for addr[63:26]
-        is_mmio = (addr >= 64'h0400_0000);
+        is_mmio = (addr >= 64'h0400_0000 && addr < 64'h0500_0000);
 
         dcache_bus.req.set_idx = addr[11:6];
         dcache_bus.req.tag.ppn = addr[55:12];  // hardcoded for demo

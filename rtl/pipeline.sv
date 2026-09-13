@@ -7,8 +7,8 @@ module pipeline(
 
     // will clean this up later through structs/intfs
 
-    gen_mem_if.master ifu_bram,
-    gen_mem_if.master dcu_bram,
+    gen_mem_if.master ifu_ram,
+    gen_mem_if.master dcu_ram,
     gen_mem_if.master dcu_mmio,
 
     input irq_t irq
@@ -62,8 +62,6 @@ module pipeline(
     logic icache_stall;
     logic mem_stall;
 
-    assign mem_wb_stall = 0;  // wb never stalls (as of now...)
-
     logic trap_flush, csr_flush;  // from mem
 
 
@@ -76,7 +74,7 @@ module pipeline(
 
     gen_reg #(.T(if_id_t)) u_if_id_reg (
         .clk (clk),
-        .en  (~(if_id_stall || icache_stall)),
+        .en  (~if_id_stall),
         .clr (if_id_flush),
         .d   (if_id_d),
         .q   (if_id_q)
@@ -131,7 +129,7 @@ module pipeline(
         .take_csr_br (csr_flush),
         .csr_br_targ (csr_br_targ),
 
-        .ram_bus    (ifu_bram),
+        .ram_bus    (ifu_ram),
 
         .out          (if_id_d),
         .icache_stall (icache_stall)
@@ -182,7 +180,7 @@ module pipeline(
         .ex_mem   (ex_mem_q),
         
         .trap_bus (u_csr_trap_bus.master),
-        .ram_bus  (dcu_bram),
+        .ram_bus  (dcu_ram),
         .mmio_bus (dcu_mmio),
 
         .mem_stall   (mem_stall),
@@ -344,20 +342,24 @@ module pipeline(
 
 
     // flush / stall
-    logic branch;
+    logic branch, global_stall;
 
     always_comb begin
+        global_stall = mem_stall || icache_stall;
+
         branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
 
-        if_id_stall  = id_ex_stall && !branch;
-        id_ex_stall  = ld_use_haz  || mem_stall;
-        ex_mem_stall = mem_stall;
+        if_id_stall  = (id_ex_stall && !branch) || global_stall;
 
-        if_id_flush  = trap_flush  || csr_flush || branch;
-        id_ex_flush  = if_id_flush || ld_use_haz;
-        ex_mem_flush = trap_flush  || csr_flush;
-        
-        mem_wb_flush = trap_flush  || mem_stall;
+        id_ex_stall  = ld_use_haz  || global_stall;
+        ex_mem_stall = global_stall;
+
+        mem_wb_stall = global_stall;
+
+        if_id_flush  = (trap_flush || csr_flush || branch) && !global_stall;
+        id_ex_flush  = (if_id_flush || ld_use_haz) && !global_stall;
+        ex_mem_flush = (trap_flush || csr_flush) && !global_stall;
+        mem_wb_flush = trap_flush && !global_stall;
     end
 
 
@@ -370,7 +372,7 @@ module pipeline(
 
     //     branch = mem_branch || take_br;
 
-    //     // Upstream stages must freeze identically when the DCU is choked by a BRAM/MMIO miss
+    //     // Upstream stages must freeze identically when the DCU is choked by a ram/MMIO miss
     //     if_id_stall  = id_ex_stall && !branch;
     //     id_ex_stall  = ld_use_haz || muldiv_haz || muldiv_bkpres || mem_stall;
     //     ex_mem_stall = mem_stall;
