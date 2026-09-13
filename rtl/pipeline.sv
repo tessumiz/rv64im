@@ -1,11 +1,15 @@
 import defs_pkg::*;
 
+
 module pipeline(
     input logic clk,
     input logic rst,
 
-    imem_if.master imem_bus,
-    dmem_if.master dmem_bus,
+    // will clean this up later through structs/intfs
+
+    gen_mem_if.master ifu_bram,
+    gen_mem_if.master dcu_bram,
+    gen_mem_if.master dcu_mmio,
 
     input irq_t irq
 );
@@ -48,12 +52,14 @@ module pipeline(
 
 
     logic ld_use_haz;
-    logic muldiv_haz;
+    // logic muldiv_haz;
 
     logic if_id_stall,  if_id_flush;
     logic id_ex_stall,  id_ex_flush;
     logic ex_mem_stall, ex_mem_flush;
     logic mem_wb_stall, mem_wb_flush;
+
+    logic mem_stall;
 
     assign mem_wb_stall = 0;  // wb never stalls (as of now...)
 
@@ -114,7 +120,7 @@ module pipeline(
 
         .take_mtvec (take_mtvec),
         .mtvec_targ (mtvec_targ),
-    
+
         .take_sepc  (take_sepc),
         .sepc_targ  (sepc_targ),
 
@@ -124,7 +130,7 @@ module pipeline(
         .take_csr_br (csr_flush),
         .csr_br_targ (csr_br_targ),
 
-        .imem_bus (imem_bus),
+        .ram_bus    (ifu_bram),
 
         .out      (if_id_d)
     );
@@ -141,6 +147,8 @@ module pipeline(
         .out      (id_ex_d)
     );
 
+    ex_mem_t ex_mem_d_raw;
+
     execute u_execute (
         .id_ex    (id_ex_q),
 
@@ -153,14 +161,29 @@ module pipeline(
 
         .take_br  (take_br),
         .br_targ  (br_targ),
-        .out      (ex_mem_d)
+        .out      (ex_mem_d_raw)
     );
 
-    mem_stage u_mem_stage (
-        .ex_mem   (ex_mem_q),
-        .dmem_bus (dmem_bus),
+    // dummy for demo; never synths...
+    always_comb begin
+        ex_mem_d = ex_mem_d_raw;
 
+        if (id_ex_q.ctrl.is_mul || id_ex_q.ctrl.is_div) begin
+            ex_mem_d.ex_res = u_muldiv_bus.res;
+        end
+    end
+
+
+    mem_stage u_mem_stage (
+        .clk      (clk),
+        .rst      (rst),
+        .ex_mem   (ex_mem_q),
+        
         .trap_bus (u_csr_trap_bus.master),
+        .ram_bus  (dcu_bram),
+        .mmio_bus (dcu_mmio),
+
+        .mem_stall   (mem_stall),
 
         .wb       (fwd_mem),
         .wb_rd    (mem_fwd_rd),
@@ -175,7 +198,7 @@ module pipeline(
 
     writeback u_writeback (
         .mem_wb   (mem_wb_q),
-        .wb_bus   (wb_stage_out),
+        .wb_bus   (wb_bus),  // arbiter disabled temporarily; revert this later
 
         .csr_w_bus (u_csr_rw_bus.w_master),
 
@@ -186,48 +209,66 @@ module pipeline(
 
 
     // MULDIV
-    muldiv_in_if muldiv_in();
-    logic is_mul, is_div;
 
-    logic  mem_branch;
-    assign mem_branch = take_mepc  || take_mtvec || take_sepc || take_stvec || csr_flush;
-
-
+    muldiv_if u_muldiv_bus();
+    
     always_comb begin
-        is_mul = id_ex_q.ctrl.is_mul;
-        is_div = id_ex_q.ctrl.is_div;
-
-        muldiv_in.clk   = clk;
-        muldiv_in.op1   = rs1_fwd;
-        muldiv_in.op2   = rs2_fwd;
-        muldiv_in.rd    = id_ex_q.rd;
-        muldiv_in.f3_2  = id_ex_q.f3[1:0];
-        muldiv_in.is_wd_op = id_ex_q.ctrl.is_wd_op;
-
-        muldiv_in.ready     = (is_mul || is_div)  && !mem_branch;
-        muldiv_in.mark_spec = ex_mem_q.ctrl.valid && !mem_branch;
+        u_muldiv_bus.op1      = rs1_fwd;
+        u_muldiv_bus.op2      = rs2_fwd;
+        u_muldiv_bus.f3_2     = id_ex_q.f3[1:0];
+        u_muldiv_bus.is_wd_op = id_ex_q.ctrl.is_wd_op;
+        u_muldiv_bus.is_mul   = id_ex_q.ctrl.is_mul;
+        u_muldiv_bus.is_div   = id_ex_q.ctrl.is_div;
     end
+    
+    muldiv_dummy u_muldiv (.bus(u_muldiv_bus.slave));
 
-    muldiv_out_if mul_out();
-    muldiv_out_if div_out();
+
+    // Add this back later...
+
+    // muldiv_in_if muldiv_in();
+    // logic is_mul, is_div;
+
+    // logic  mem_branch;
+    // assign mem_branch = take_mepc  || take_mtvec || take_sepc || take_stvec || csr_flush;
 
 
-    mul u_mul (
-        .in  (muldiv_in),
-        .out (mul_out)
-    );
+    // always_comb begin
+    //     is_mul = id_ex_q.ctrl.is_mul;
+    //     is_div = id_ex_q.ctrl.is_div;
 
-    div u_div (
-        .in  (muldiv_in),
-        .out (div_out)
-    );
+    //     muldiv_in.clk   = clk;
+    //     muldiv_in.op1   = rs1_fwd;
+    //     muldiv_in.op2   = rs2_fwd;
+    //     muldiv_in.rd    = id_ex_q.rd;
+    //     muldiv_in.f3_2  = id_ex_q.f3[1:0];
+    //     muldiv_in.is_wd_op = id_ex_q.ctrl.is_wd_op;
 
-    wb_arbiter u_wb_arbiter (
-        .mul_out (mul_out),
-        .div_out (div_out),
-        .wb_out   (wb_stage_out),
-        .out      (wb_bus)
-    );
+    //     muldiv_in.ready     = (is_mul || is_div)  && !mem_branch;
+    //     muldiv_in.mark_spec = ex_mem_q.ctrl.valid && !mem_branch;
+    // end
+
+    // muldiv_out_if mul_out();
+    // muldiv_out_if div_out();
+
+
+    // mul u_mul (
+    //     .in  (muldiv_in),
+    //     .out (mul_out)
+    // );
+
+    // div u_div (
+    //     .in  (muldiv_in),
+    //     .out (div_out)
+    // );
+
+
+    // wb_arbiter u_wb_arbiter (
+    //     .mul_out  (mul_out),
+    //     .div_out  (div_out),
+    //     .wb_out   (wb_stage_out),
+    //     .out      (wb_bus)
+    // );
 
 
     // ZICSR
@@ -282,50 +323,68 @@ module pipeline(
     );
 
 
-    muldiv_haz u_muldiv_haz (
-        .clk   (clk),
-        .rst   (rst),
+    // muldiv_haz u_muldiv_haz (
+    //     .clk   (clk),
+    //     .rst   (rst),
 
-        .rs1_a (id_ex_d.rs1_a),
-        .rs2_a (id_ex_d.rs2_a),
-        .rd    (id_ex_d.rd),
-        .if_id_stall (if_id_stall),
+    //     .rs1_a (id_ex_d.rs1_a),
+    //     .rs2_a (id_ex_d.rs2_a),
+    //     .rd    (id_ex_d.rd),
+    //     .if_id_stall (if_id_stall),
 
-        .is_muldiv (id_ex_d.ctrl.is_mul || id_ex_d.ctrl.is_div),
+    //     .is_muldiv (id_ex_d.ctrl.is_mul || id_ex_d.ctrl.is_div),
 
-        .wb_en      (wb_bus.valid),
-        .wb_rd      (wb_bus.rd),
+    //     .wb_en      (wb_bus.valid),
+    //     .wb_rd      (wb_bus.rd),
 
-        .muldiv_haz  (muldiv_haz)
-    );
+    //     .muldiv_haz  (muldiv_haz)
+    // );
 
 
     // flush / stall
-    logic muldiv_bkpres;
     logic branch;
 
     always_comb begin
-        muldiv_bkpres =
-            (id_ex_q.ctrl.is_mul && !muldiv_in.mul_ready) ||
-            (id_ex_q.ctrl.is_div && !muldiv_in.div_ready);
-
-
-        branch = mem_branch || take_br;
+        branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
 
         if_id_stall  = id_ex_stall && !branch;
-        id_ex_stall  = ld_use_haz || muldiv_haz || muldiv_bkpres || dmem_bus.busy;
-        ex_mem_stall = dmem_bus.busy;
+        id_ex_stall  = ld_use_haz  || mem_stall;
+        ex_mem_stall = mem_stall;
 
-        if_id_flush  = trap_flush  || csr_flush  || branch;
-        id_ex_flush  = if_id_flush || ld_use_haz || muldiv_haz;
-        ex_mem_flush = (trap_flush || csr_flush) || id_ex_q.ctrl.is_mul || id_ex_q.ctrl.is_div;
-        mem_wb_flush = trap_flush  || dmem_bus.busy;
-
-        mul_out.mark_safe = ex_mem_q.ctrl.valid && !mem_branch;
-        div_out.mark_safe = mul_out.mark_safe;
-
-        mul_out.flush_spec = ex_mem_q.ctrl.valid && mem_branch;
-        div_out.flush_spec = mul_out.flush_spec;
+        if_id_flush  = trap_flush  || csr_flush || branch;
+        id_ex_flush  = if_id_flush || ld_use_haz;
+        ex_mem_flush = trap_flush  || csr_flush;
+        
+        mem_wb_flush = trap_flush  || mem_stall;
     end
+
+
+    // logic muldiv_bkpres;
+    // always_comb begin
+    //     muldiv_bkpres =
+    //         (id_ex_q.ctrl.is_mul && !muldiv_in.mul_ready) ||
+    //         (id_ex_q.ctrl.is_div && !muldiv_in.div_ready);
+
+
+    //     branch = mem_branch || take_br;
+
+    //     // Upstream stages must freeze identically when the DCU is choked by a BRAM/MMIO miss
+    //     if_id_stall  = id_ex_stall && !branch;
+    //     id_ex_stall  = ld_use_haz || muldiv_haz || muldiv_bkpres || mem_stall;
+    //     ex_mem_stall = mem_stall;
+
+    //     if_id_flush  = trap_flush  || csr_flush  || branch;
+    //     id_ex_flush  = if_id_flush || ld_use_haz || muldiv_haz;
+    //     ex_mem_flush = (trap_flush || csr_flush) || id_ex_q.ctrl.is_mul || id_ex_q.ctrl.is_div;
+        
+    //     // Flushes the WB stage during a multi-cycle memory stall to prevent spurious commits
+    //     mem_wb_flush = trap_flush  || mem_stall;
+
+    //     mul_out.mark_safe = ex_mem_q.ctrl.valid && !mem_branch;
+    //     div_out.mark_safe = mul_out.mark_safe;
+
+    //     mul_out.flush_spec = ex_mem_q.ctrl.valid && mem_branch;
+    //     div_out.flush_spec = mul_out.flush_spec;
+    // end
 
 endmodule

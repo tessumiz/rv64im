@@ -47,14 +47,13 @@
 
 * Routed through the IFU's flush signal; abort cache + TLB (+ PTW if TLB is waiting for it).
 
-* Note; "flush" here does NOT mean flushing the icache; that happens through a separate
-  icache_flush signal (reserved for fence.I).
-  Consecutive icache_flushes can never occur in our design.
+* Note; "flush" here does NOT mean flushing the icache; icache doesn't need flush sig
+  Consecutive icache_rst can never occur in our design.
 
 
 
 # Fence
 
-* FENCE.I asserts flush on icache (icache_flush sig will be asserted from MEM stage)
+* FENCE.I asserts rst on icache (clr fsm)
 * SFENCE.VMA asserts rst on itlb; no wb (as evicts are on-the-spot), single-cycle clr
   (similarly, itlb_flush sig will be asserted from MEM stage)

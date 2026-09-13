@@ -1,3 +1,27 @@
+// speculative muldiv has been neutered for now
+
+interface muldiv_if;
+    logic [63:0] op1;
+    logic [63:0] op2;
+    logic [1:0]  f3_2;
+    logic        is_wd_op;
+    logic        is_mul;
+    logic        is_div;
+    logic [63:0] res;
+    
+    modport master (
+        output op1, op2, f3_2, is_wd_op, is_mul, is_div,
+        input  res
+    );
+    
+    modport slave (
+        input  op1, op2, f3_2, is_wd_op, is_mul, is_div,
+        output res
+    );
+endinterface
+
+
+/*
 // out-of-order complete, in-order issue; stalls at ID for raw and waw
 
 interface muldiv_in_if;
@@ -50,8 +74,7 @@ interface muldiv_out_if;
 endinterface
 
 
-/*
-For a 3 stage mul, you can't cram the 3 is_spec bits into a global flg because of edge cases:
 
-mul, mem, mul -> (spec, bubble, non_spec)  // if mem takes > 1 cycle
+// For a 3 stage mul, you can't cram the 3 is_spec bits into a global flg because of edge cases:
+// mul, mem, mul -> (spec, bubble, non_spec)  // if mem takes > 1 cycle
 */

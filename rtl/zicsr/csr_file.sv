@@ -22,12 +22,14 @@ module csr_file(
     output logic        take_sepc,
     output logic        take_stvec,
 
-    output logic [1:0] priv,
-    output satp_t      satp_out,
-    output logic [63:0] pmpcfg0_out,
-    output logic [63:0] pmpaddr_out[4]
-
+    output logic [1:0]  priv,
+    output satp_t       satp_out
 );
+
+    // IMPORTANT; add this as output instead after the demo
+    logic [63:0] pmpcfg0_out;
+    logic [63:0] pmpaddr_out[4];
+
 
     logic [63:0] mstatus;
     logic [63:0] mtvec;

@@ -1,5 +1,8 @@
+// to be purged after demo
+
 import defs_pkg::*;
 import mem_pkg::*; 
+
 
 module fetch (
     input logic clk,
@@ -25,11 +28,8 @@ module fetch (
 
     input logic [63:0] csr_br_targ,
 
-    // temporary
-    output logic [55:0]  ram_addr,
-    output logic         ram_r_en,
-    input  logic [511:0] ram_r_data,
-    input  logic         ram_ready,
+    // temp
+    gen_mem_if.master ram_bus,
 
     output if_id_t out
 );
@@ -53,11 +53,11 @@ module fetch (
         icache_bus.req.set_idx = pc[11:6];
         icache_bus.req.tag.ppn = pc[55:12];  // hardwired; solely for the demo
 
-        ram_r_en = icache_bus.mem_req.fill_req;
-        ram_addr = { icache_bus.req.tag.ppn, icache_bus.req.set_idx, 6'b0 };
+        ram_bus.r_en = icache_bus.mem_req.fill_req;
+        ram_bus.addr = { icache_bus.req.tag.ppn, icache_bus.req.set_idx, 6'b0 };
 
-        icache_bus.mem_rsp.fill_en   = ram_ready && ram_r_en;
-        icache_bus.mem_rsp.fill_data = ram_r_data;
+        icache_bus.mem_rsp.fill_en   = ram_bus.ready && ram_bus.r_en;
+        icache_bus.mem_rsp.fill_data = ram_bus.r_data;
         icache_bus.mem_rsp.evict_complete = 1'b1;
 
         nxt_pc =
@@ -77,7 +77,7 @@ module fetch (
     set_cache u_icache (
         .clk   (clk),
         .rst   (rst),
-        .flush (0),  // disabled; enable only once fence instrs are added...
+        .flush (0),  // icache doesn't need to flush
         .bus   (icache_bus)
     );
 
