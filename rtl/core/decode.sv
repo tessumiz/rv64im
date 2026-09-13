@@ -13,7 +13,8 @@ module decode (
     output id_ex_t out
 );
 
-    exc_t decoder_exc;
+    exc_t  decoder_exc;
+    ctrl_t decoder_ctrl;
 
     decoder u_decoder (
         .ins   (if_id.ins),
@@ -24,7 +25,7 @@ module decode (
         .rd    (out.rd),
         .f3    (out.f3),
         .f7    (out.f7),
-        .ctrl  (out.ctrl),
+        .ctrl  (decoder_ctrl),
 
         .exc   (decoder_exc)
     );
@@ -51,23 +52,33 @@ module decode (
     logic illegal_csr_w, is_csr;
 
     always_comb begin
+        // unverified, so neutered
+        out.ctrl = decoder_ctrl;
+        out.ctrl.is_csr = 0;
+        out.ctrl.is_zimm = 0;
+
         is_csr = out.ctrl.is_csr;
 
         csr_bus.r_en   = is_csr;
         csr_bus.r_addr = out.imm[11:0];
 
-        illegal_csr_w = ((out.imm[11:10] == CSR_ADDR_RO) && out.ctrl.csr_we) ||
-                        (priv < out.imm[9:8]);
+        illegal_csr_w = is_csr && (
+            ((out.imm[11:10] == CSR_ADDR_RO) && out.ctrl.csr_we) ||
+            (priv < out.imm[9:8])
+        );
 
         out.pc  = if_id.pc;
         out.rs2 = out.ctrl.is_csr ? csr_bus.r_data : rs2;
 
-        out.exc.valid = (is_csr && csr_bus.r_exc) || decoder_exc.valid || illegal_csr_w;
+        out.exc.valid = 0;
+        // out.exc.valid = (is_csr && csr_bus.r_exc) || decoder_exc.valid || illegal_csr_w;
         out.exc.cause = (is_csr && (csr_bus.r_exc || illegal_csr_w)) ? EXC_ILLEGAL_INSTR :
                         (decoder_exc.valid ? decoder_exc.cause : 0);
 
-        out.exc.is_mret  = decoder_exc.is_mret;
-        out.exc.is_sret  = decoder_exc.is_sret;
+        out.exc.is_mret = 0;
+        out.exc.is_sret = 0;
+        // out.exc.is_mret  = decoder_exc.is_mret;
+        // out.exc.is_sret  = decoder_exc.is_sret;
         out.exc.tval     = {32'b0, if_id.ins};
     end
 

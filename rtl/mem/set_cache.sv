@@ -304,8 +304,10 @@ module set_cache (
             w_dirty =  0;
         end
 
-        bus.rsp.busy  = (state != CACHE_IDLE);  // consider OR-ing with rst...
-        bus.rsp.ready = (state == CACHE_TAG_CMP && bus.req.r_en) || (state == CACHE_R_FILL) || (state == CACHE_WRITE);
+        bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;
+
+        bus.rsp.ready = (state == CACHE_TAG_CMP && bus.req.r_en && hit) ||
+                        (state == CACHE_R_FILL || state == CACHE_WRITE);
     end
 
     always_ff @(posedge clk) begin

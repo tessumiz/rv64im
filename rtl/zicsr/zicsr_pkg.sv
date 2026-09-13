@@ -55,7 +55,7 @@ package zicsr_pkg;
         MSTATUS_SUM   = 18,
         MSTATUS_MXR   = 19,
 
-        MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (3 << MSTATUS_SPP),
+        MSTATUS_S_MASK = (1 << MSTATUS_SIE) | (1 << MSTATUS_SPIE) | (1 << MSTATUS_SPP),
         MSTATUS_RST    = (PRIV_M << MSTATUS_MPP_L);  // MIE, SIE, MPIE, SPIE, SUM, MXR = 0
 
 

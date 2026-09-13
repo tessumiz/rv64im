@@ -29,12 +29,8 @@ module decoder (
         f7      = ins[31:25];
         sys_imm = ins[31:20];
 
-        rd      = ctrl.wb ? ins[11:7]  : 0;
-        rs1_a   = has_rs1 ? ins[19:15] : 0;
-        rs2_a   = has_rs2 ? ins[24:20] : 0;
-
-        has_rs1 =  0;
-        has_rs2 =  0;
+        has_rs1 = 0;
+        has_rs2 = 0;
 
         ctrl = '0;
         ctrl.valid = 1;
@@ -155,6 +151,11 @@ module decoder (
                 exc.cause = EXC_ILLEGAL_INSTR;
             end
         endcase
+
+
+        rd    = ctrl.wb ? ins[11:7]  : 0;
+        rs1_a = has_rs1 ? ins[19:15] : 0;
+        rs2_a = has_rs2 ? ins[24:20] : 0;
     end
 
 endmodule

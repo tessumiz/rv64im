@@ -5,6 +5,7 @@ module alu(
     input  logic        is_wd_op,
     output logic [63:0] alu_out
 );
+
     logic [63:0] sum;
     logic        cout;
     logic        cmp_out;

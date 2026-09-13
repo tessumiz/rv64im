@@ -39,7 +39,7 @@ module execute (
         .alu_out  (alu_out)
     );
 
-    assign br_targ = alu_out & ~1;
+    assign br_targ = alu_out & ~64'b1;
 
     bcu u_bcu (
         .rs1     (rs1_fwd),

@@ -70,10 +70,15 @@ module mem_stage (
         mem_cause = ex_mem.exc.valid ? ex_mem.exc.cause :
                     64'(ex_mem.ctrl.mem_w ? EXC_STORE_MISALIGNED : EXC_LOAD_MISALIGNED);
 
-        is_exc  = (ex_mem.exc.valid || is_misaligned);
-        is_mret = ex_mem.exc.is_mret;
-        is_sret = ex_mem.exc.is_sret;
-        is_irq  = trap_bus.irq_pending; 
+        is_exc  = 0; 
+        is_mret = 0;
+        is_sret = 0;
+        is_irq  = 0;
+
+        // is_exc  = (ex_mem.exc.valid || is_misaligned);
+        // is_mret = ex_mem.exc.is_mret;
+        // is_sret = ex_mem.exc.is_sret;
+        // is_irq  = trap_bus.irq_pending;
 
         safe = !(is_exc || is_mret || is_sret || is_irq);
         is_mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;

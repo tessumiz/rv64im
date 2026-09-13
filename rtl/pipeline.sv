@@ -59,6 +59,7 @@ module pipeline(
     logic ex_mem_stall, ex_mem_flush;
     logic mem_wb_stall, mem_wb_flush;
 
+    logic icache_stall;
     logic mem_stall;
 
     assign mem_wb_stall = 0;  // wb never stalls (as of now...)
@@ -75,7 +76,7 @@ module pipeline(
 
     gen_reg #(.T(if_id_t)) u_if_id_reg (
         .clk (clk),
-        .en  (~if_id_stall),
+        .en  (~(if_id_stall || icache_stall)),
         .clr (if_id_flush),
         .d   (if_id_d),
         .q   (if_id_q)
@@ -132,7 +133,8 @@ module pipeline(
 
         .ram_bus    (ifu_bram),
 
-        .out      (if_id_d)
+        .out          (if_id_d),
+        .icache_stall (icache_stall)
     );
 
     decode u_decode (

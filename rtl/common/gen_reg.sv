@@ -1,5 +1,6 @@
 module gen_reg #(
-  parameter type T = logic [31:0]
+  parameter type T = logic [31:0],
+  parameter T RST_VAL = 0
 )(
     input logic clk,
     input logic clr,
@@ -11,7 +12,7 @@ module gen_reg #(
 
     always_ff @(posedge clk) begin
         if (clr) begin
-            q <= 0;  // for pipe_regs, unsets valid to 0
+            q <= RST_VAL;
         end
         else if (en) begin
             q <= d;

@@ -31,7 +31,8 @@ module fetch (
     // temp
     gen_mem_if.master ram_bus,
 
-    output if_id_t out
+    output if_id_t out,
+    output logic   icache_stall
 );
 
     logic [63:0] pc;
@@ -45,7 +46,7 @@ module fetch (
     ) icache_bus ();
 
     always_comb begin
-        icache_bus.req.r_en   =  1; 
+        icache_bus.req.r_en   = !stall;
         icache_bus.req.w_en   =  0; 
         icache_bus.req.w_mask = '0;
         icache_bus.req.w_data = '0;
@@ -60,18 +61,23 @@ module fetch (
         icache_bus.mem_rsp.fill_data = ram_bus.r_data;
         icache_bus.mem_rsp.evict_complete = 1'b1;
 
-        nxt_pc =
-            take_br     ? br_targ     :
-            take_mepc   ? mepc_targ   :
-            take_mtvec  ? mtvec_targ  :
-            take_stvec  ? stvec_targ  :
-            take_sepc   ? sepc_targ   :
-            take_csr_br ? csr_br_targ :
-            pc + 4;
+
+        // zicsr might have errors, add this later...
+
+        // nxt_pc =
+        //     take_mtvec  ? mtvec_targ  :
+        //     take_mepc   ? mepc_targ   :
+        //     take_stvec  ? stvec_targ  :
+        //     take_sepc   ? sepc_targ   :
+        //     take_csr_br ? csr_br_targ :
+        //     take_br     ? br_targ     :
+        //     pc + 4;
+
+        nxt_pc = take_br ? br_targ : pc + 4;
 
         out.pc = pc;
         out.ins = icache_bus.rsp.r_data[ pc[5:2] * 32 +: 32 ];
-        out.exc.valid = icache_bus.rsp.ready && !flush;
+        out.exc.valid = 0;  // No errors for now...
     end
 
     set_cache u_icache (
@@ -81,10 +87,12 @@ module fetch (
         .bus   (icache_bus)
     );
 
-    gen_reg #(.T(logic [63:0]))
+    assign icache_stall = !icache_bus.rsp.ready || icache_bus.rsp.busy;
+
+    gen_reg #(.T(logic [63:0]), .RST_VAL(64'h8000_0000))
     u_pc (
         .clk (clk),
-        .en  (!(stall || !icache_bus.rsp.ready)), 
+        .en  (!(stall || icache_stall)), 
         .clr (rst),
         .d   (nxt_pc),
         .q   (pc)
