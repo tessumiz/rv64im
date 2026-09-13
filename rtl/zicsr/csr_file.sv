@@ -23,7 +23,9 @@ module csr_file(
     output logic        take_stvec,
 
     output logic [1:0] priv,
-    output satp_t      satp_out
+    output satp_t      satp_out,
+    output logic [63:0] pmpcfg0_out,
+    output logic [63:0] pmpaddr_out[4]
 
 );
 
@@ -52,6 +54,13 @@ module csr_file(
     assign satp_out = satp;
 
 
+    logic [63:0] pmpcfg0;
+    logic [63:0] pmpaddr[4];
+
+    assign pmpcfg0_out = pmpcfg0;
+    assign pmpaddr_out = pmpaddr;
+
+
     // SOFTWARE RW
     logic [63:0] r_data;
 
@@ -77,6 +86,12 @@ module csr_file(
             CSR_MIDELEG:  r_data = mideleg;
 
             CSR_SATP:     r_data = satp;
+
+            CSR_PMPCFG0:  r_data = pmpcfg0;
+            CSR_PMPADDR0: r_data = pmpaddr[0];
+            CSR_PMPADDR1: r_data = pmpaddr[1];
+            CSR_PMPADDR2: r_data = pmpaddr[2];
+            CSR_PMPADDR3: r_data = pmpaddr[3];
 
             default: r_data = '0;
         endcase
@@ -116,8 +131,7 @@ module csr_file(
 
         irq_act = (mie & mip);
 
-        irq_cause =
-        {
+        irq_cause = {
             1'b1,
             63'(
                 irq_act[EXT_INT] ? EXT_INT :
@@ -197,7 +211,14 @@ module csr_file(
         if (rst) begin
             mstatus  <= MSTATUS_RST;
             priv_lvl <= PRIV_M;
+
+            pmpcfg0    <= '0;
+            pmpaddr[0] <= '0;
+            pmpaddr[1] <= '0;
+            pmpaddr[2] <= '0;
+            pmpaddr[3] <= '0;
         end
+
         else begin
             if (rw_bus.w_en) begin
                 // can't be deferred to another always_ff.....
@@ -226,6 +247,33 @@ module csr_file(
                         if (w_data[63:60] inside {SATP_BARE, SATP_SV39, SATP_SV48, SATP_SV57})
                             satp <= w_data;
                     end
+
+                    CSR_PMPCFG0: begin
+                        for (int i = 0; i < 4; i++) begin
+                            // if unlocked for w
+                            if (!pmpcfg0[i*8 + 7]) begin
+                                automatic logic [7:0] cfg = w_data[i*8 +: 8];
+
+                                cfg[6:5] = 2'b00;  // reserved
+
+                                // only NAPOT supported (cheaper)
+                                if (cfg[4:3] != PMP_A_OFF)
+                                    cfg[4:3] = PMP_A_NAPOT;
+
+                                // again specs; corrected ~R+W to R+W
+                                if (cfg[1:0] == 2'b10)
+                                    cfg[0] = 1;
+
+                                pmpcfg0[i*8 +: 8] <= cfg;
+                            end
+                        end
+                    end
+
+                    // addr [55:2] ; protect the upper bits
+                    CSR_PMPADDR0: if (!pmpcfg0[7])  pmpaddr[0] <= w_data & PMPADDR_MASK;
+                    CSR_PMPADDR1: if (!pmpcfg0[15]) pmpaddr[1] <= w_data & PMPADDR_MASK;
+                    CSR_PMPADDR2: if (!pmpcfg0[23]) pmpaddr[2] <= w_data & PMPADDR_MASK;
+                    CSR_PMPADDR3: if (!pmpcfg0[31]) pmpaddr[3] <= w_data & PMPADDR_MASK;
                 endcase
             end
 

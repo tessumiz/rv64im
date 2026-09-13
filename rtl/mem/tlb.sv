@@ -48,7 +48,7 @@ module tlb (
     localparam uint SETS   = bus.SETS;
     localparam uint WAYS   = bus.WAYS;
 
-    // assuming this is common; parametrize later...
+    // assuming this is common to i/d; parametrize later
     localparam uint SUPERPAGE_CAM_SIZE = 8;
     localparam uint SUPERPAGE_CAM_LOGW = $clog2(SUPERPAGE_CAM_SIZE);
 
@@ -73,11 +73,13 @@ module tlb (
 
     // 4KB normal pages
     line_t mem [SETS-1:0][WAYS-1:0];
-    line_t [WAYS-1:0] cmp_in_line;
+    logic  mem_valid [SETS-1:0][WAYS-1:0];  // saves power for rst; unnecessary for super
+
     logic  [WAYS-1:0] cmp_out;
     line_t            norm_hit_line;
     norm_way_idx_t    norm_hit_way;
     logic             norm_hit;
+
 
     // superpages
     super_line_t  superpage_mem [SUPERPAGE_CAM_SIZE];  // CAM
@@ -113,9 +115,10 @@ module tlb (
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            mem           <= '0;
+            mem_valid     <= '0;
             superpage_mem <= '0;
             super_touched <= '0;
+
             state         <= TLB_IDLE;
         end
         else begin
@@ -166,9 +169,6 @@ module tlb (
 
 
     always_comb begin
-        // async read
-        cmp_in_line = mem[bus.req.set_idx];
-
         cmp_out        = 0;
         super_cmp_out  = 0;
 
@@ -180,17 +180,18 @@ module tlb (
 
         // norm
         for (uint i = 0; i < WAYS; i++) begin
-            automatic line_t curr_line = cmp_in_line[i];
+            automatic line_t curr_line  = mem      [bus.req.set_idx][i];  // async read
+            automatic logic  curr_valid = mem_valid[bus.req.set_idx][i];
 
             cmp_out[i] = (
-                curr_line.valid &&
-                curr_line.tag.vpn_upper == bus.req.tag.vpn_upper &&
+                curr_valid &&
+                (curr_line.tag.vpn_upper == bus.req.tag.vpn_upper) &&
 
                 // gated asid check
                 (curr_line.tag.g || curr_line.tag.asid == bus.req.tag.asid)
             );
 
-            cmp_in_valid[i] = curr_line.valid;
+            cmp_in_valid[i] = curr_valid;
         
             norm_hit_way  |= ( i[WAY_LOG_W-1:0] & {WAY_LOG_W{cmp_out[i]}} );
             norm_hit_line |= ( curr_line & {$bits(line_t){cmp_out[i]}} );

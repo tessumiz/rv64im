@@ -72,6 +72,27 @@ package zicsr_pkg;
         SATP_SV57 = 10;
 
 
+    localparam logic [11:0]
+        CSR_PMPCFG0  = 12'h3A0,
+        
+        CSR_PMPADDR0 = 12'h3B0,
+        CSR_PMPADDR1 = 12'h3B1,
+        CSR_PMPADDR2 = 12'h3B2,
+        CSR_PMPADDR3 = 12'h3B3;
+
+    localparam int
+        PMP_R = 0,
+        PMP_W = 1,
+        PMP_X = 2,
+        PMP_L = 7;
+
+    localparam logic [1:0]
+        PMP_A_OFF   = 2'b00,
+        PMP_A_NAPOT = 2'b11;
+
+    localparam logic [53:0] PMPADDR_MASK = 64'h003F_FFFF_FFFF_FFFF;
+
+
     localparam int unsigned
         EXT_INT  = 11,
         TMR_INT  = 7,
