@@ -23,7 +23,7 @@
 
 >> Abort:
 
-- filling    : wait till txn ends and discard rsp fills
+- filling    : wait till the current beat ends, and mark the whole line as invalid
 - fill req   : abort the req
 - tlb to ptw : abort signal passed down to ptw, which uses the above rules to end the txn
 
@@ -38,18 +38,23 @@
 
 * Else, proceed with MMIO op (refer below).
 
->> If at any point anyone faults, carry over exc_t to ID. Let the PC + IFU stall till a
-   later stage flushes it.
+>> If at any point anyone faults, wait for any pending txn to close, then carry over exc_t
+   to ID. Let the PC + IFU stall till a later stage flushes it; no point in proceeding.
 
 
 
 # - br-taken / CSR-flush / DCU-fault / IRQ / exc
 
-* Abort cache + TLB (+ PTW if TLB is waiting for it) IFF it isn't being flushed.
+* Routed through the IFU's flush signal; abort cache + TLB (+ PTW if TLB is waiting for it).
+
+* Note; "flush" here does NOT mean flushing the icache; that happens through a separate
+  icache_flush signal (reserved for fence.I).
+  Consecutive icache_flushes can never occur in our design.
 
 
 
 # Fence
 
-* FENCE.I asserts flush on icache
+* FENCE.I asserts flush on icache (icache_flush sig will be asserted from MEM stage)
 * SFENCE.VMA asserts rst on itlb; no wb (as evicts are on-the-spot), single-cycle clr
+  (similarly, itlb_flush sig will be asserted from MEM stage)

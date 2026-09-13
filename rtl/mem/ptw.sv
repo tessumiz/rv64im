@@ -169,6 +169,8 @@ module ptw(
 
         access_fault = (ram_bus.ready && ram_bus.access_fault);
 
+        // I can't assert ready when A/D is being written back; these might fault (to be considered
+        // in the future), so I can't let the master move on without receiving this txn's status.
         ready = (state == PTW_CHECK_PTE && is_leaf && !rmw_A_D) || 
                 (state == PTW_WRITE && ram_bus.ready);
     end

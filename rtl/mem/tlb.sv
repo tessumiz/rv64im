@@ -56,7 +56,7 @@ module tlb (
     typedef logic  [WAY_LOG_W-1:0] norm_way_idx_t;
 
     typedef struct packed {
-        logic  valid;
+        // logic  valid;  // stored separately...
         TAG_T  tag;
         DATA_T data;
     } line_t;
@@ -285,12 +285,14 @@ module tlb (
 
         bus.mem_req.page_req = (state == TLB_IDLE) && bus.req.valid && miss;
 
-        bus.rsp.page_fault = (state == TLB_FAULT_CHECK) && (
-            ( bus.req.w & !read_data.w) |
-            ( bus.req.x & !read_data.x) |
-            ( bus.req.r & !read_data.r & !(read_data.x & bus.req.mmu_ctx.MXR)) |
-            ((bus.req.u & !read_data.u) | (!bus.req.u & read_data.u & (!bus.req.mmu_ctx.SUM | bus.req.x)))
-        );
+        bus.rsp.page_fault =
+            ((state == TLB_FAULT_CHECK) && (
+                ( bus.req.w & !read_data.w) |
+                ( bus.req.x & !read_data.x) |
+                ( bus.req.r & !read_data.r & !(read_data.x & bus.req.mmu_ctx.MXR)) |
+                ((bus.req.u & !read_data.u) | (!bus.req.u & read_data.u & (!bus.req.mmu_ctx.SUM | bus.req.x)))
+            )) ||
+            (state == TLB_FETCH_PAGE && bus.mem_rsp.fetch_fault);
 
         bus.mem_req.evict_page_wb = (state == TLB_FAULT_CHECK && !bus.rsp.page_fault) &&
                                     (bus.req.w && !read_data.d && hit);
@@ -321,10 +323,11 @@ module tlb (
             else if (write_page) begin
                 if (!bus.mem_rsp.fetched_is_super) begin
                     mem[bus.req.set_idx][victim_way] <= '{
-                        valid: 1,
                         tag: { bus.req.tag.vpn_upper, bus.req.tag.asid, bus.mem_rsp.fetched_page.g },
                         data: bus.mem_rsp.fetched_page
                     };
+
+                    mem_valid[bus.req.set_idx][victim_way] <= 1;
                 end
                 else begin
                     superpage_mem[super_victim_idx] <= '{
@@ -332,7 +335,7 @@ module tlb (
                         vpn: full_vpn,
                         vpn_mask: bus.mem_rsp.fetched_super_mask,
                         asid: bus.req.tag.asid,
-                        g: bus.req.tag.g,
+                        g: bus.mem_rsp.fetched_page.g,
                         data: bus.mem_rsp.fetched_page
                     };
 

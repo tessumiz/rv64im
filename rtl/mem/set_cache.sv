@@ -202,10 +202,9 @@ module set_cache (
 
 
     always_comb begin
-        hit_way         = 0;
-        hit_line        = 0;
-        cmp_out         = 0;
-        bus.rsp.r_data  = 0;
+        hit_way  = 0;
+        hit_line = 0;
+        cmp_out  = 0;
 
         for (uint i = 0; i < WAYS; i++) begin
             cmp_out[i]      = (curr_meta[i].valid && curr_line[i].tag == bus.req.tag);
@@ -267,7 +266,6 @@ module set_cache (
         victim_meta = curr_meta[victim_way];
 
         flush_line  = curr_line[curr_flush_way];
-
 
         // fill_data must remain stable till ready fires
         bus.rsp.r_data = hit ? hit_line.data : bus.mem_rsp.fill_data;

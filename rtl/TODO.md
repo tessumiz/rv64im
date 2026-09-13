@@ -1,21 +1,26 @@
 ## BUGS / INCOMPLETE STUFF
-- [ ] (later) have a review of all mem modules (not just correctness...)
+- [ ] Propagate page/access faults from RAM/PTW to the master, or let the ifu/dcu
+      units handle it separately, since the transaction itself is separate? Propagation
+      seems unnecessary...
+
+- [ ] Cache line evictions needing the same 8-beat bursts
+
+- [ ] superpages in pwc; consider several cases and judge the ROI since pwc is tiny
 
 
 ## IMMEDIATE
+- [ ] basic bimodal br-pred
+
+- [ ] fixing muldiv
+
+
+## PENDING
 - [ ] tweak the invariant parameteres of every cache/tlb (including pwc and plrus)
 
 - [ ] synth bugs in bram access; flatten ways using a for (or generate)  (???)
 
-- [ ] fixing muldiv and filling in the mul and div circuits
+- [ ] doing everything that got stripped for the demo
 
-- [ ] ifu/dcu/ram-arbiter
-
-- [ ] basic bimodal br-pred
-
-
-## PENDING
-- [ ] basic interconnect, mmio for key inputs
 
 
 ## LATER
@@ -25,6 +30,8 @@
 
 - [ ] document that our OS is not going to randomize page alloc; hence keeping the 16-CAM
       pwc reasonable. Maybe even tweak it down to 8-CAM...
+
+- [*] signals which latch vs pulse
 
 
 ## PERHAPS
