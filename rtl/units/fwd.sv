@@ -1,6 +1,4 @@
-import defs_pkg::*;
-
-module fwd(
+module fwd import defs_pkg::*; (
     input logic [4:0] rs1_a,
     input logic [4:0] rs2_a,
 

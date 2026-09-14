@@ -1,8 +1,4 @@
-import defs_pkg::uint;
-import mem_pkg::*;
-
-
-module tree_plru #(
+module tree_plru import defs_pkg::uint, mem_pkg::*; #(
     parameter uint SETS = 64,
     parameter uint WAYS = 4,
     parameter uint WAY_LOG_W = 2
@@ -29,13 +25,17 @@ module tree_plru #(
 
 
     always_comb begin
+        automatic uint way_idx;
+        automatic uint plru_idx;
+        automatic uint offset;
+
         // finding a victim; empty lines can be victims as well
         curr_plru = plru[set_idx];
 
         for (uint i = 0; i < WAY_LOG_W; i++) begin
-            automatic uint way_idx  = (WAY_LOG_W - 1) - i;
-            automatic uint plru_idx = (2 ** i) - 1;
-            automatic uint offset   = (victim_way >> (way_idx + 1));
+            way_idx  = (WAY_LOG_W - 1) - i;
+            plru_idx = (2 ** i) - 1;
+            offset   = (victim_way >> (way_idx + 1));
 
             victim_way[way_idx] = curr_plru[plru_idx + offset];
         end
@@ -61,9 +61,9 @@ module tree_plru #(
 
         if (ctrl.hit || ctrl.fill_req) begin
             for (uint i = 0; i < WAY_LOG_W; i++) begin
-                automatic uint way_idx  = (WAY_LOG_W - 1) - i;
-                automatic uint plru_idx = (2 ** i) - 1;
-                automatic uint offset   = (accessed_way >> (way_idx + 1));
+                way_idx  = (WAY_LOG_W - 1) - i;
+                plru_idx = (2 ** i) - 1;
+                offset   = (accessed_way >> (way_idx + 1));
 
                 nxt_plru[plru_idx + offset] = ~accessed_way[way_idx];
             end

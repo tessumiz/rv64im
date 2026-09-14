@@ -1,8 +1,4 @@
-import defs_pkg::uint;
-import ppu_pkg::*;
-
-
-module ppu (
+module ppu import defs_pkg::uint, ppu_pkg::*; (
     input logic clk,
     input logic rst,
 

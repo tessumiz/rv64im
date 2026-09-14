@@ -1,6 +1,3 @@
-import mem_pkg::*;
-import defs_pkg::uint;
-
 /*
 Previously:
 
@@ -36,7 +33,7 @@ with the tlb (specs)
 */
 
 
-module tlb (
+module tlb import mem_pkg::*, defs_pkg::uint; (
     input  logic clk,
     input  logic rst,
 
@@ -72,8 +69,8 @@ module tlb (
 
 
     // 4KB normal pages
-    line_t mem [SETS-1:0][WAYS-1:0];
-    logic  mem_valid [SETS-1:0][WAYS-1:0];  // saves power for rst; unnecessary for super
+    line_t [WAYS-1:0] mem [SETS-1:0];
+    logic  [WAYS-1:0] mem_valid [SETS-1:0];  // saves power for rst; unnecessary for super
 
     logic  [WAYS-1:0] cmp_out;
     line_t            norm_hit_line;

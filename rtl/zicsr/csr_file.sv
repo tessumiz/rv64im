@@ -1,8 +1,4 @@
-import defs_pkg::*;
-import zicsr_pkg::*;
-
-
-module csr_file(
+module csr_file import defs_pkg::*, zicsr_pkg::*; (
     input logic clk,
     input logic rst,
 

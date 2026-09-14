@@ -1,7 +1,4 @@
-import defs_pkg::*;
-
-
-module pipeline(
+module pipeline import defs_pkg::*; (
     input logic clk,
     input logic rst,
 
@@ -221,7 +218,7 @@ module pipeline(
         u_muldiv_bus.is_div   = id_ex_q.ctrl.is_div;
     end
     
-    muldiv_dummy u_muldiv (.bus(u_muldiv_bus.slave));
+    demo_muldiv u_muldiv (.bus(u_muldiv_bus.slave));
 
 
     // Add this back later...

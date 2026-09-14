@@ -1,10 +1,6 @@
 // to be purged after demo
 
-import defs_pkg::*;
-import mem_pkg::*; 
-
-
-module fetch (
+module fetch import defs_pkg::*, mem_pkg::*; (
     input logic clk,
     input logic rst,
     input logic stall,

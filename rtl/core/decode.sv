@@ -1,7 +1,4 @@
-import defs_pkg::*;
-import zicsr_pkg::*;
-
-module decode (
+module decode import defs_pkg::*, zicsr_pkg::*; (
     input logic clk,
 
     wb_if.slave wb_bus,

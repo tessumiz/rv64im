@@ -1,9 +1,5 @@
-import mem_pkg::*;
-import zicsr_pkg::*;
-
-
 // supports sv39, sv48 and sv57 (added for fun, was never a strict necessity...)
-module ptw(
+module ptw import mem_pkg::*, zicsr_pkg::*; (
     input clk,
     input rst,
 

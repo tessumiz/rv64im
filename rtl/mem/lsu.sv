@@ -1,6 +1,4 @@
-import mem_pkg::*;
-
-module lsu (
+module lsu import mem_pkg::*; (
     input  logic        is_mem_op,
 
     input  logic [2:0]  f3,

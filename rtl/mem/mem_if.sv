@@ -1,13 +1,9 @@
-import defs_pkg::uint;
-import mem_pkg::*;
-
-
 /*
 Use this generic full-duplex intf for internal connections.
 Dead code elimination will auto-remove unused signals. Beyond that,
 unused signals is just a matter of blurring semantic clarity.
 */
-interface gen_mem_if #(
+interface gen_mem_if import defs_pkg::uint, mem_pkg::*; #(
     parameter int ADDR_W,
     parameter int DATA_W,
 
@@ -46,7 +42,7 @@ interface gen_mem_if #(
 endinterface
 
 
-interface set_cache_if #(
+interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
     parameter type  TAG_T,
     parameter type  DATA_T,
     parameter uint  SETS,
@@ -102,7 +98,7 @@ interface set_cache_if #(
 endinterface
 
 
-interface tlb_if #(
+interface tlb_if import defs_pkg::uint, mem_pkg::*; #(
     parameter type  TAG_T,
     parameter type  DATA_T,
     parameter uint  SETS,

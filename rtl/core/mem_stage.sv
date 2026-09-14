@@ -1,11 +1,6 @@
 // to be purged after demo
 
-import defs_pkg::*;
-import mem_pkg::*;
-import zicsr_pkg::*;
-
-
-module mem_stage (
+module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
     input  logic        clk,
     input  logic        rst,
     input  ex_mem_t     ex_mem,

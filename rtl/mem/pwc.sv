@@ -1,7 +1,3 @@
-import mem_pkg::*;
-import defs_pkg::uint;
-
-
 /*
 16-len CAM mapping <ppn4, ppn3, ppn2, mode, asid> to <lvl1_root>
 
@@ -16,7 +12,7 @@ TODO; need to think of the ROI of supporting superpages of various
 levels for various modes.
 */
 
-module pwc (
+module pwc import mem_pkg::*, defs_pkg::uint; (
     input  logic        clk,
     input  logic        rst,
 

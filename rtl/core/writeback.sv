@@ -1,6 +1,4 @@
-import defs_pkg::*;
-
-module writeback (
+module writeback import defs_pkg::*; (
     input mem_wb_t mem_wb,
 
     wb_if.master   wb_bus,

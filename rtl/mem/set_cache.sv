@@ -1,8 +1,4 @@
-import mem_pkg::*;
-import defs_pkg::uint;
-
-
-module set_cache (
+module set_cache import mem_pkg::*, defs_pkg::uint; (
     input  logic clk,
     input  logic rst,
     input  logic flush,  // triggers dirty wb fsm
@@ -10,8 +6,8 @@ module set_cache (
     set_cache_if.cache bus
 );
 
-    localparam type DATA_T = bus.DATA_T;
-    localparam type TAG_T  = bus.TAG_T;
+    localparam type DATA_T = type(bus.req.w_data);
+    localparam type TAG_T  = type(bus.req.tag);
     localparam uint SETS   = bus.SETS;
     localparam uint WAYS   = bus.WAYS;
 
@@ -31,8 +27,8 @@ module set_cache (
 
 
     // bram
-    line_t mem  [SETS-1:0][WAYS-1:0];
-    meta_t meta [SETS-1:0][WAYS-1:0];
+    line_t [WAYS-1:0] mem  [SETS-1:0];
+    meta_t [WAYS-1:0] meta [SETS-1:0];
 
     line_t [WAYS-1:0] curr_line;
     meta_t [WAYS-1:0] curr_meta;
@@ -115,7 +111,7 @@ module set_cache (
                 curr_meta <= meta[curr_clr_addr[$clog2(SETS)-1:0]];
 
                 curr_clr_addr <= curr_clr_addr + 1;
-                meta[curr_clr_addr[$clog2(SETS)-1:0]] <= '0; 
+                meta[curr_clr_addr[$clog2(SETS)-1:0]] <= '0;
             end
         end
 

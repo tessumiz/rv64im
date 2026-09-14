@@ -1,6 +1,4 @@
-import defs_pkg::*;
-
-module immgen(
+module immgen import defs_pkg::*; (
     input  logic [31:0] ins,
     output logic [63:0] imm
 );

@@ -1,7 +1,7 @@
 // functional dummy; to be purged after demo
 
 
-module muldiv_dummy (
+module demo_muldiv (
     muldiv_if.slave bus
 );
     logic [127:0] mul_res;

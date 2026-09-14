@@ -1,8 +1,4 @@
-import defs_pkg::*;
-import zicsr_pkg::*;
-
-
-module decoder (
+module decoder import defs_pkg::*, zicsr_pkg::*; (
     input  logic [31:0] ins,
     input  logic [1:0]  priv,
 

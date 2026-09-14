@@ -1,7 +1,5 @@
-import defs_pkg::uint;
-
-
 package ppu_pkg;
+    import defs_pkg::uint;
 
     typedef struct packed {
         logic vblank;

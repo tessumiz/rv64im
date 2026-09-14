@@ -1,7 +1,4 @@
-import defs_pkg::*;
-
-
-module soc (
+module soc import defs_pkg::*; (
     input logic  clk,
     input logic  rst,
 

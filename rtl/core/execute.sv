@@ -1,8 +1,4 @@
-import defs_pkg::*;
-import zicsr_pkg::*;
-
-
-module execute (
+module execute import defs_pkg::*, zicsr_pkg::*; (
     input id_ex_t id_ex,
 
     input fwd_sig_t    fwd_sig,
