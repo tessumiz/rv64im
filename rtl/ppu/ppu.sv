@@ -5,7 +5,7 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
     gen_mem_if.slave mmio_bus
 );
 
-    ppu_ctrl_t   ctrl;
+    ppu_ctrl_t   ctrl /* verilator public_flat_rd */;
 
     logic [15:0] palette  [SIZE_PALETTE/2 - 1:0];
     logic [7:0]  bg_map   [SIZE_BG_MAP - 1:0];

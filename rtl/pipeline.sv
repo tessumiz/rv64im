@@ -51,6 +51,7 @@ module pipeline import defs_pkg::*; (
     logic ld_use_haz;
     // logic muldiv_haz;
 
+    logic if_flush;
     logic if_id_stall,  if_id_flush;
     logic id_ex_stall,  id_ex_flush;
     logic ex_mem_stall, ex_mem_flush;
@@ -72,7 +73,7 @@ module pipeline import defs_pkg::*; (
     gen_reg #(.T(if_id_t)) u_if_id_reg (
         .clk (clk),
         .en  (~if_id_stall),
-        .clr (if_id_flush),
+        .clr (if_id_flush || rst),
         .d   (if_id_d),
         .q   (if_id_q)
     );
@@ -80,7 +81,7 @@ module pipeline import defs_pkg::*; (
     gen_reg #(.T(id_ex_t)) u_id_ex_reg (
         .clk (clk),
         .en  (~id_ex_stall),
-        .clr (id_ex_flush),
+        .clr (id_ex_flush || rst),
         .d   (id_ex_d),
         .q   (id_ex_q)
     );
@@ -88,7 +89,7 @@ module pipeline import defs_pkg::*; (
     gen_reg #(.T(ex_mem_t)) u_ex_mem_reg (
         .clk (clk),
         .en  (~ex_mem_stall),
-        .clr (ex_mem_flush),
+        .clr (ex_mem_flush || rst),
         .d   (ex_mem_d),
         .q   (ex_mem_q)
     );
@@ -96,7 +97,7 @@ module pipeline import defs_pkg::*; (
     gen_reg #(.T(mem_wb_t)) u_mem_wb_reg (
         .clk (clk),
         .en  (~mem_wb_stall),
-        .clr (mem_wb_flush),
+        .clr (mem_wb_flush || rst),
         .d   (mem_wb_d),
         .q   (mem_wb_q)
     );
@@ -106,7 +107,7 @@ module pipeline import defs_pkg::*; (
         .clk      (clk),
         .rst      (rst),
         .stall    (if_id_stall),
-        .flush    (if_id_flush),
+        .flush    (if_flush),
 
         .take_br    (take_br),
         .br_targ    (br_targ),
@@ -339,23 +340,20 @@ module pipeline import defs_pkg::*; (
 
 
     // flush / stall
-    logic branch, global_stall;
+    logic branch;
 
-    always_comb begin
-        global_stall = mem_stall || icache_stall;
-        branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
+    assign branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
 
-        id_ex_stall  = ld_use_haz  || global_stall;
-        ex_mem_stall = global_stall;
-        mem_wb_stall = global_stall;
+    assign if_id_stall  = mem_stall || ld_use_haz;
+    assign id_ex_stall  = mem_stall;
+    assign ex_mem_stall = mem_stall;
+    assign mem_wb_stall = mem_stall;
 
-        if_id_stall  = (id_ex_stall && !branch) || global_stall;
-
-        if_id_flush  = (trap_flush || csr_flush || branch) && !global_stall;
-        id_ex_flush  = (if_id_flush || ld_use_haz) && !global_stall;
-        ex_mem_flush = (trap_flush || csr_flush) && !global_stall;
-        mem_wb_flush = trap_flush && !global_stall;
-    end
+    assign if_flush     = !mem_stall && (trap_flush  || csr_flush || branch);
+    assign if_id_flush  = if_flush || (icache_stall && !if_id_stall);
+    assign id_ex_flush  = !mem_stall && (if_flush || ld_use_haz);
+    assign ex_mem_flush = !mem_stall && (trap_flush  || csr_flush);
+    assign mem_wb_flush = !mem_stall && trap_flush;
 
 
     // logic muldiv_bkpres;
@@ -385,5 +383,159 @@ module pipeline import defs_pkg::*; (
     //     mul_out.flush_spec = ex_mem_q.ctrl.valid && mem_branch;
     //     div_out.flush_spec = mul_out.flush_spec;
     // end
+
+
+// // ============================================================
+// // VERILATOR PIPELINE DEBUG
+// // ============================================================
+
+// // -------- Pipeline register state --------
+
+// logic        dbg_if_valid        /* verilator public_flat */;
+// logic [63:0] dbg_if_pc           /* verilator public_flat */;
+// logic [31:0] dbg_if_ins          /* verilator public_flat */;
+
+// logic        dbg_id_valid        /* verilator public_flat */;
+// logic [63:0] dbg_id_pc           /* verilator public_flat */;
+
+// logic        dbg_ex_valid        /* verilator public_flat */;
+// logic [63:0] dbg_ex_pc          /* verilator public_flat */;
+// logic [4:0]  dbg_ex_rs1_a       /* verilator public_flat */;
+// logic [4:0]  dbg_ex_rs2_a       /* verilator public_flat */;
+// logic [4:0]  dbg_ex_rd          /* verilator public_flat */;
+// logic [2:0]  dbg_ex_f3          /* verilator public_flat */;
+// logic [6:0]  dbg_ex_f7          /* verilator public_flat */;
+
+// logic        dbg_mem_valid       /* verilator public_flat */;
+// logic [63:0] dbg_mem_pc          /* verilator public_flat */;
+// logic [4:0]  dbg_mem_rd          /* verilator public_flat */;
+// logic [2:0]  dbg_mem_f3          /* verilator public_flat */;
+
+// logic        dbg_wb_valid        /* verilator public_flat */;
+// logic [63:0] dbg_wb_pc           /* verilator public_flat */;
+// logic [4:0]  dbg_wb_rd           /* verilator public_flat */;
+
+// // -------- Stall / flush control --------
+
+// logic dbg_if_stall              /* verilator public_flat */;
+// logic dbg_id_stall              /* verilator public_flat */;
+// logic dbg_ex_stall              /* verilator public_flat */;
+// logic dbg_mem_stall_pipe        /* verilator public_flat */;
+
+// logic dbg_if_flush              /* verilator public_flat */;
+// logic dbg_if_id_flush           /* verilator public_flat */;
+// logic dbg_id_ex_flush           /* verilator public_flat */;
+// logic dbg_ex_mem_flush          /* verilator public_flat */;
+// logic dbg_mem_wb_flush          /* verilator public_flat */;
+
+// logic dbg_icache_stall          /* verilator public_flat */;
+// logic dbg_mem_stage_stall       /* verilator public_flat */;
+// logic dbg_ld_use_haz            /* verilator public_flat */;
+
+// // -------- Control flow --------
+
+// logic dbg_take_br               /* verilator public_flat */;
+// logic [63:0] dbg_br_targ        /* verilator public_flat */;
+// logic dbg_branch                /* verilator public_flat */;
+
+// // -------- Forwarding --------
+
+// logic dbg_fwd_mem               /* verilator public_flat */;
+// logic [4:0] dbg_mem_fwd_rd      /* verilator public_flat */;
+// logic [63:0] dbg_mem_fwd_data   /* verilator public_flat */;
+
+// logic dbg_fwd_wb                /* verilator public_flat */;
+// logic [4:0] dbg_wb_fwd_rd       /* verilator public_flat */;
+// logic [63:0] dbg_wb_fwd_data    /* verilator public_flat */;
+
+// logic dbg_mem_fwd_rs1           /* verilator public_flat */;
+// logic dbg_wb_fwd_rs1            /* verilator public_flat */;
+// logic dbg_mem_fwd_rs2           /* verilator public_flat */;
+// logic dbg_wb_fwd_rs2            /* verilator public_flat */;
+
+// // -------- Hazard / pipeline movement --------
+
+// logic dbg_if_id_en              /* verilator public_flat */;
+// logic dbg_id_ex_en              /* verilator public_flat */;
+// logic dbg_ex_mem_en             /* verilator public_flat */;
+// logic dbg_mem_wb_en             /* verilator public_flat */;
+
+
+// // ============================================================
+// // Assignments
+// // ============================================================
+
+// assign dbg_if_valid = if_id_q.valid;
+// assign dbg_if_pc    = if_id_q.pc;
+// assign dbg_if_ins   = if_id_q.ins;
+
+// assign dbg_id_valid = id_ex_q.ctrl.valid;
+// assign dbg_id_pc    = id_ex_q.pc;
+
+// assign dbg_ex_valid = id_ex_q.ctrl.valid;
+// assign dbg_ex_pc    = id_ex_q.pc;
+// assign dbg_ex_rs1_a = id_ex_q.rs1_a;
+// assign dbg_ex_rs2_a = id_ex_q.rs2_a;
+// assign dbg_ex_rd    = id_ex_q.rd;
+// assign dbg_ex_f3    = id_ex_q.f3;
+// assign dbg_ex_f7    = id_ex_q.f7;
+
+// assign dbg_mem_valid = ex_mem_q.ctrl.valid;
+// assign dbg_mem_pc    = ex_mem_q.pc;
+// assign dbg_mem_rd    = ex_mem_q.rd;
+// assign dbg_mem_f3    = ex_mem_q.f3;
+
+// assign dbg_wb_valid = mem_wb_q.ctrl.valid;
+// assign dbg_wb_pc    = mem_wb_q.pc;
+// assign dbg_wb_rd    = mem_wb_q.rd;
+
+
+// // -------- Stall / flush --------
+
+// assign dbg_if_stall       = if_id_stall;
+// assign dbg_id_stall       = id_ex_stall;
+// assign dbg_ex_stall       = ex_mem_stall;
+// assign dbg_mem_stall_pipe = mem_wb_stall;
+
+// assign dbg_if_flush   = if_flush;
+// assign dbg_if_id_flush = if_id_flush;
+// assign dbg_id_ex_flush = id_ex_flush;
+// assign dbg_ex_mem_flush = ex_mem_flush;
+// assign dbg_mem_wb_flush = mem_wb_flush;
+
+// assign dbg_icache_stall   = icache_stall;
+// assign dbg_mem_stage_stall = mem_stall;
+// assign dbg_ld_use_haz     = ld_use_haz;
+
+
+// // -------- Branch --------
+
+// assign dbg_take_br  = take_br;
+// assign dbg_br_targ  = br_targ;
+// assign dbg_branch   = branch;
+
+
+// // -------- Forwarding --------
+
+// assign dbg_fwd_mem       = fwd_mem;
+// assign dbg_mem_fwd_rd    = mem_fwd_rd;
+// assign dbg_mem_fwd_data  = mem_fwd_data;
+
+// assign dbg_fwd_wb        = fwd_wb;
+// assign dbg_wb_fwd_rd     = wb_fwd_rd;
+// assign dbg_wb_fwd_data   = wb_fwd_data;
+
+// assign dbg_mem_fwd_rs1 = fwd_sig.mem_fwd_rs1;
+// assign dbg_wb_fwd_rs1  = fwd_sig.wb_fwd_rs1;
+// assign dbg_mem_fwd_rs2 = fwd_sig.mem_fwd_rs2;
+// assign dbg_wb_fwd_rs2  = fwd_sig.wb_fwd_rs2;
+
+
+// // -------- Enables --------
+
+// assign dbg_if_id_en = ~if_id_stall;
+// assign dbg_id_ex_en = ~id_ex_stall;
+// assign dbg_ex_mem_en = ~ex_mem_stall;
+// assign dbg_mem_wb_en = ~mem_wb_stall;
 
 endmodule

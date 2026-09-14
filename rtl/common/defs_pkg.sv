@@ -76,7 +76,8 @@ package defs_pkg;
     typedef struct packed {
         logic [63:0] pc;
         logic [31:0] ins;
-
+        
+        logic valid;
         exc_t exc;
     } if_id_t;
 

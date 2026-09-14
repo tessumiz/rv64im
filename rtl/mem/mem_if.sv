@@ -48,6 +48,7 @@ interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
     parameter uint  SETS,
     parameter uint  WAYS
 );
+
     localparam uint IDX_W      = uint'($clog2(SETS));
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
     localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
@@ -59,6 +60,8 @@ interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
         logic             w_en;
         DATA_T            w_data;
         logic [W_MASK_LEN-1:0] w_mask;
+
+        // add is_sub_write instead of OR-ing from w_mask
     } req_t;
 
     typedef struct packed {

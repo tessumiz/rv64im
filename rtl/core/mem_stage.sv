@@ -138,12 +138,12 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 
     always_comb begin
         if (is_mmio) begin
-            raw_r_data  = mmio_bus.r_data;
-            mem_stall   = is_mem_op && !mmio_bus.ready;
+            raw_r_data = mmio_bus.r_data;
+            mem_stall  = is_mem_op && !mmio_bus.ready;
         end
         else begin
-            raw_r_data  = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
-            mem_stall   = is_mem_op && !dcache_bus.rsp.ready;
+            raw_r_data = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
+            mem_stall  = is_mem_op && !dcache_bus.rsp.ready;
         end
     end
 
@@ -188,5 +188,100 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         .flush (0),  // never flushes (demo purposes)
         .bus   (dcache_bus)
     );
+
+
+// // ============================================================
+// // VERILATOR MEM DEBUG
+// // ============================================================
+
+// logic        dbg_valid           /* verilator public_flat */;
+// logic [63:0] dbg_pc              /* verilator public_flat */;
+// logic [4:0]  dbg_rd              /* verilator public_flat */;
+
+// logic [63:0] dbg_addr            /* verilator public_flat */;
+// logic [2:0]  dbg_f3              /* verilator public_flat */;
+// logic [2:0]  dbg_word_idx        /* verilator public_flat */;
+
+// logic [63:0] dbg_ex_res          /* verilator public_flat */;
+// logic [63:0] dbg_rs2             /* verilator public_flat */;
+
+// logic        dbg_mem_r           /* verilator public_flat */;
+// logic        dbg_mem_w           /* verilator public_flat */;
+// logic        dbg_is_mem_op       /* verilator public_flat */;
+// logic        dbg_is_mmio         /* verilator public_flat */;
+// logic        dbg_mem_stall       /* verilator public_flat */;
+
+// logic        dbg_misaligned      /* verilator public_flat */;
+
+// logic [63:0] dbg_raw_r_data      /* verilator public_flat */;
+// logic [63:0] dbg_r_data          /* verilator public_flat */;
+// logic [63:0] dbg_w_data_fmt      /* verilator public_flat */;
+// logic [7:0]  dbg_w_mask          /* verilator public_flat */;
+
+// logic        dbg_dcache_req_r    /* verilator public_flat */;
+// logic        dbg_dcache_req_w    /* verilator public_flat */;
+// logic [5:0]  dbg_dcache_set      /* verilator public_flat */;
+// logic [43:0] dbg_dcache_tag      /* verilator public_flat */;
+
+// logic        dbg_dcache_rsp_ready /* verilator public_flat */;
+// logic [511:0] dbg_dcache_rsp_data  /* verilator public_flat */;
+
+// logic        dbg_mmio_r          /* verilator public_flat */;
+// logic        dbg_mmio_w          /* verilator public_flat */;
+// logic        dbg_mmio_ready      /* verilator public_flat */;
+// logic [63:0] dbg_mmio_addr       /* verilator public_flat */;
+
+// logic        dbg_ram_r_en        /* verilator public_flat */;
+// logic        dbg_ram_w_en        /* verilator public_flat */;
+// logic        dbg_ram_ready       /* verilator public_flat */;
+// logic [63:0] dbg_ram_addr       /* verilator public_flat */;
+
+// logic        dbg_wb              /* verilator public_flat */;
+// logic [63:0] dbg_fwd_data        /* verilator public_flat */;
+
+// assign dbg_valid    = ex_mem.ctrl.valid;
+// assign dbg_pc       = ex_mem.pc;
+// assign dbg_rd       = ex_mem.rd;
+
+// assign dbg_addr     = addr;
+// assign dbg_f3       = ex_mem.f3;
+// assign dbg_word_idx = word_idx;
+
+// assign dbg_ex_res   = ex_mem.ex_res;
+// assign dbg_rs2      = ex_mem.rs2;
+
+// assign dbg_mem_r    = ex_mem.ctrl.mem_r;
+// assign dbg_mem_w    = ex_mem.ctrl.mem_w;
+// assign dbg_is_mem_op = is_mem_op;
+// assign dbg_is_mmio  = is_mmio;
+// assign dbg_mem_stall = mem_stall;
+
+// assign dbg_misaligned = is_misaligned;
+
+// assign dbg_raw_r_data = raw_r_data;
+// assign dbg_r_data     = r_data;
+// assign dbg_w_data_fmt = lsu_w_data_fmt;
+// assign dbg_w_mask     = lsu_w_mask;
+
+// assign dbg_dcache_req_r = dcache_bus.req.r_en;
+// assign dbg_dcache_req_w = dcache_bus.req.w_en;
+// assign dbg_dcache_set   = dcache_bus.req.set_idx;
+// assign dbg_dcache_tag   = dcache_bus.req.tag.ppn;
+
+// assign dbg_dcache_rsp_ready = dcache_bus.rsp.ready;
+// assign dbg_dcache_rsp_data  = dcache_bus.rsp.r_data;
+
+// assign dbg_mmio_r     = mmio_bus.r_en;
+// assign dbg_mmio_w     = mmio_bus.w_en;
+// assign dbg_mmio_ready = mmio_bus.ready;
+// assign dbg_mmio_addr  = mmio_bus.addr;
+
+// assign dbg_ram_r_en  = ram_bus.r_en;
+// assign dbg_ram_w_en  = ram_bus.w_en;
+// assign dbg_ram_ready = ram_bus.ready;
+// assign dbg_ram_addr  = ram_bus.addr;
+
+// assign dbg_wb       = wb;
+// assign dbg_fwd_data = fwd_data;
 
 endmodule

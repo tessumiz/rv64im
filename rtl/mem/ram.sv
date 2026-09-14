@@ -7,7 +7,7 @@ module ram #(
 
     localparam LINES = SIZE_BYTES / 64;
 
-    logic [511:0] mem [LINES-1:0];
+    logic [511:0] mem [LINES-1:0] /* verilator public_flat_rw */;
 
     logic [$clog2(LINES)-1:0] idx;
     assign idx = bus.addr[$clog2(LINES) + 5 : 6];
