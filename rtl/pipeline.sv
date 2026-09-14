@@ -343,15 +343,13 @@ module pipeline import defs_pkg::*; (
 
     always_comb begin
         global_stall = mem_stall || icache_stall;
-
         branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
-
-        if_id_stall  = (id_ex_stall && !branch) || global_stall;
 
         id_ex_stall  = ld_use_haz  || global_stall;
         ex_mem_stall = global_stall;
-
         mem_wb_stall = global_stall;
+
+        if_id_stall  = (id_ex_stall && !branch) || global_stall;
 
         if_id_flush  = (trap_flush || csr_flush || branch) && !global_stall;
         id_ex_flush  = (if_id_flush || ld_use_haz) && !global_stall;

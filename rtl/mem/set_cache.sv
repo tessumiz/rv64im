@@ -41,12 +41,16 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     /* turned into a one-hot fsm for fpga and binary for asic by tools */
     set_cache_fsm_t state;
 
-    logic  is_subword_w;
-    assign is_subword_w = !(&bus.req.w_mask);
-
 
     // latching req sigs
-    logic req_r_en, req_w_en;
+    logic  req_r_en, req_w_en;
+    TAG_T  req_tag;
+    DATA_T req_w_data;
+    logic [bus.W_MASK_LEN-1:0] req_w_mask;
+    logic [$clog2(SETS)-1:0]   req_set_idx;
+
+    logic  is_subword_w;
+    assign is_subword_w = !(&req_w_mask);
 
 
     // sigs for writes to cache
@@ -117,8 +121,8 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         else begin
             if (write) begin
-                meta[bus.req.set_idx][w_way].valid <= 1;
-                meta[bus.req.set_idx][w_way].dirty <= w_dirty;
+                meta[req_set_idx][w_way].valid <= 1;
+                meta[req_set_idx][w_way].dirty <= w_dirty;
             end
 
             unique case (state)
@@ -132,8 +136,12 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                     else if (bus.req.r_en || bus.req.w_en) begin
                         state  <= CACHE_READ;
 
-                        req_r_en <= bus.req.r_en;
-                        req_w_en <= bus.req.w_en;
+                        req_r_en    <= bus.req.r_en;
+                        req_w_en    <= bus.req.w_en;
+                        req_tag     <= bus.req.tag;
+                        req_w_data  <= bus.req.w_data;
+                        req_w_mask  <= bus.req.w_mask;
+                        req_set_idx <= bus.req.set_idx;
 
                         curr_line <= mem [bus.req.set_idx];
                         curr_meta <= meta[bus.req.set_idx];
@@ -199,6 +207,8 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                 CACHE_R_FILL, CACHE_WRITE : begin
                     state <= CACHE_IDLE;
                 end
+
+                default: ;
             endcase
         end
     end
@@ -210,7 +220,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         cmp_out  = 0;
 
         for (uint i = 0; i < WAYS; i++) begin
-            cmp_out[i]      = (curr_meta[i].valid && curr_line[i].tag == bus.req.tag);
+            cmp_out[i]      = (curr_meta[i].valid && curr_line[i].tag == req_tag);
             cmp_in_valid[i] =  curr_meta[i].valid;
         end
 
@@ -249,7 +259,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         .clk          (clk),
         .rst          (rst),
 
-        .set_idx      (bus.req.set_idx),
+        .set_idx      (req_set_idx),
         .ctrl         ({bus.rsp.hit, bus.mem_req.fill_req, bus.rsp.ready}),
 
         .hit_way      (hit_way),
@@ -267,11 +277,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     always_comb begin
         victim_line = curr_line[victim_way];
         victim_meta = curr_meta[victim_way];
-
         flush_line  = curr_line[curr_flush_way];
-
-        // fill_data must remain stable till ready fires
-        bus.rsp.r_data = hit ? hit_line.data : bus.mem_rsp.fill_data;
 
         bus.mem_req.fill_req =
             ((state == CACHE_TAG_CMP) && miss && (req_r_en || (req_w_en && is_subword_w))) ||
@@ -284,7 +290,9 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         bus.mem_req.evict_tag    = (state == CACHE_FLUSH_DIRTY_SET) ? flush_line.tag  : victim_line.tag;
         bus.mem_req.evicted_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_line.data : victim_line.data;
+    end
 
+    always_comb begin
         norm_w =
             (state == CACHE_TAG_CMP && req_w_en && !(miss && is_subword_w)) ||
             (state == CACHE_SUBWORD_W_FILL);
@@ -295,8 +303,8 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         // hit write/subword-write (note that bus.w_en is already gated to logic 'write'...)
         if (norm_w) begin
-            w_data  = bus.req.w_data;
-            w_wmask = bus.req.w_mask;
+            w_data  = req_w_data;
+            w_wmask = req_w_mask;
             w_dirty = 1;
         end
         // miss fill; when (state == CACHE_REQ_FILL && bus.fill_en)
@@ -306,15 +314,21 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
             w_dirty =  0;
         end
 
-        bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;
+    end
 
+    always_comb begin
+        // fill_data must remain stable till ready fires
         bus.rsp.ready = (state == CACHE_TAG_CMP && req_r_en && hit) ||
                         (state == CACHE_R_FILL || state == CACHE_WRITE);
+
+        bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;
+
+        bus.rsp.r_data = hit ? hit_line.data : bus.mem_rsp.fill_data;
     end
 
     always_ff @(posedge clk) begin
         if (!rst && write) begin
-            mem [bus.req.set_idx][w_way].tag   <= bus.req.tag;
+            mem [req_set_idx][w_way].tag   <= req_tag;
             
             // # moved upwards...
             // meta[bus.set_idx][w_way].valid <= 1;
@@ -322,7 +336,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
             for (uint i = 0; i < bus.W_MASK_LEN; i++) begin
                 if (w_wmask[i])
-                    mem[bus.req.set_idx][w_way].data[8*i +: 8] <= w_data[8*i +: 8];
+                    mem[req_set_idx][w_way].data[8*i +: 8] <= w_data[8*i +: 8];
             end
         end
     end

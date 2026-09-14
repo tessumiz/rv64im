@@ -13,70 +13,81 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
     exc_t  decoder_exc;
     ctrl_t decoder_ctrl;
 
+    logic [4:0]  rs1_a, rs2_a, rd;
+    logic [2:0]  f3;
+    logic [6:0]  f7;
+    logic [63:0] reg_rs1, reg_rs2;
+    logic [63:0] imm_val;
+
     decoder u_decoder (
         .ins   (if_id.ins),
         .priv  (priv),
 
-        .rs1_a (out.rs1_a),
-        .rs2_a (out.rs2_a),
-        .rd    (out.rd),
-        .f3    (out.f3),
-        .f7    (out.f7),
+        .rs1_a (rs1_a),
+        .rs2_a (rs2_a),
+        .rd    (rd),
+        .f3    (f3),
+        .f7    (f7),
         .ctrl  (decoder_ctrl),
-
         .exc   (decoder_exc)
     );
 
-    logic [63:0] rs2;
-
     regfile u_reg (
         .clk     (clk),
-        .rs1_a   (out.rs1_a),
-        .rs2_a   (out.rs2_a),
+        .rs1_a   (rs1_a),
+        .rs2_a   (rs2_a),
         .rd      (wb_bus.rd),
         .wb_data (wb_bus.data),
         .wb_en   (wb_bus.valid),
 
-        .rs1     (out.rs1),
-        .rs2     (rs2)
+        .rs1     (reg_rs1),
+        .rs2     (reg_rs2)
     );
 
     immgen u_immgen (
         .ins (if_id.ins),
-        .imm (out.imm)
+        .imm (imm_val)
     );
 
     logic illegal_csr_w, is_csr;
 
     always_comb begin
-        // unverified, so neutered
-        out.ctrl = decoder_ctrl;
-        out.ctrl.is_csr = 0;
-        out.ctrl.is_zimm = 0;
+        automatic ctrl_t ctrl_tmp = decoder_ctrl;
 
-        is_csr = out.ctrl.is_csr;
+        // unverified; so neutered...
+        ctrl_tmp.is_csr = 0;
+        ctrl_tmp.is_zimm = 0;
+
+        is_csr = ctrl_tmp.is_csr;
 
         csr_bus.r_en   = is_csr;
-        csr_bus.r_addr = out.imm[11:0];
+        csr_bus.r_addr = imm_val[11:0];
 
         illegal_csr_w = is_csr && (
-            ((out.imm[11:10] == CSR_ADDR_RO) && out.ctrl.csr_we) ||
-            (priv < out.imm[9:8])
+            ((imm_val[11:10] == CSR_ADDR_RO) && ctrl_tmp.csr_we) ||
+            (priv < imm_val[9:8])
         );
 
+        out.rs1_a = rs1_a;
+        out.rs2_a = rs2_a;
+        out.rd    = rd;
+        out.f3    = f3;
+        out.f7    = f7;
+        out.rs1   = reg_rs1;
+        out.imm   = imm_val;
+
         out.pc  = if_id.pc;
-        out.rs2 = out.ctrl.is_csr ? csr_bus.r_data : rs2;
+        out.rs2 = ctrl_tmp.is_csr ? csr_bus.r_data : reg_rs2;
 
         out.exc.valid = 0;
-        // out.exc.valid = (is_csr && csr_bus.r_exc) || decoder_exc.valid || illegal_csr_w;
         out.exc.cause = (is_csr && (csr_bus.r_exc || illegal_csr_w)) ? EXC_ILLEGAL_INSTR :
                         (decoder_exc.valid ? decoder_exc.cause : 0);
 
         out.exc.is_mret = 0;
         out.exc.is_sret = 0;
-        // out.exc.is_mret  = decoder_exc.is_mret;
-        // out.exc.is_sret  = decoder_exc.is_sret;
-        out.exc.tval     = {32'b0, if_id.ins};
+        out.exc.tval    = {32'b0, if_id.ins};
+
+        out.ctrl = ctrl_tmp;
     end
 
 endmodule

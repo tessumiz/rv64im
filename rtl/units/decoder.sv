@@ -112,7 +112,7 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
                     has_rs1 = !f3[2];
 
                     csr_w_op    = (f3[1:0] == CSR_RW);
-                    ctrl.csr_we = (csr_w_op || (!csr_w_op && rs1_a != 0));
+                    ctrl.csr_we = (csr_w_op || (!csr_w_op && ins[19:15] != 0));
 
                 end else begin
                     exc.valid = 1;

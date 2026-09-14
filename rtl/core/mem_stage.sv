@@ -42,21 +42,6 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         .WAYS   (DCACHE_WAYS)
     ) dcache_bus ();
 
-    lsu u_lsu (
-        .is_mem_op     (is_mem_op),
-        .f3            (ex_mem.f3),
-        .addr          (addr),
-
-        .r_data_raw    (raw_r_data),
-        .w_data_raw    (ex_mem.rs2),
-        .w_mask        (lsu_w_mask),
-
-        .r_data_fmt    (r_data),
-        .w_data_fmt    (lsu_w_data_fmt),
-
-        .is_misaligned (is_misaligned)
-    );
-
 
     always_comb begin
         addr = ex_mem.ex_res;
@@ -80,7 +65,24 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 
         // hardcoded PMA; synths to a redn-OR tree for addr[63:26]
         is_mmio = (addr >= 64'h0400_0000 && addr < 64'h0500_0000);
+    end
 
+    lsu u_lsu (
+        .is_mem_op     (is_mem_op),
+        .f3            (ex_mem.f3),
+        .addr          (addr),
+
+        .r_data_raw    (raw_r_data),
+        .w_data_raw    (ex_mem.rs2),
+        .w_mask        (lsu_w_mask),
+
+        .r_data_fmt    (r_data),
+        .w_data_fmt    (lsu_w_data_fmt),
+
+        .is_misaligned (is_misaligned)
+    );
+
+    always_comb begin
         dcache_bus.req.set_idx = addr[11:6];
         dcache_bus.req.tag.ppn = addr[55:12];  // hardcoded for demo
 
@@ -96,9 +98,15 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
             mmio_bus.w_en   = is_mem_op && ex_mem.ctrl.mem_w;
             mmio_bus.w_data = lsu_w_data_fmt;
             mmio_bus.w_mask = lsu_w_mask;
-            
-            raw_r_data  = mmio_bus.r_data;
-            mem_stall   = is_mem_op && !mmio_bus.ready;
+
+            /*
+            Big mistake; there isn't an always_comb block which can exec first to resolve the dependency
+            always_comb is procedural and atomic; no stitching/interleaved topo-sort can be performed...
+            In sims, this current block must run before the mmio_bus block.
+            */
+
+            // raw_r_data  = mmio_bus.r_data;
+            // mem_stall   = is_mem_op && !mmio_bus.ready;
         end
         else begin
             dcache_bus.req.r_en   = is_mem_op && ex_mem.ctrl.mem_r;
@@ -111,25 +119,42 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
             mmio_bus.w_en   =  0;
             mmio_bus.w_data = '0;
             mmio_bus.w_mask = '0;
-            
-            raw_r_data  = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
-            mem_stall   = is_mem_op && !dcache_bus.rsp.ready;
+
+            // Remove this; just a reminder of a big mistake...
+
+            // raw_r_data  = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
+            // mem_stall   = is_mem_op && !dcache_bus.rsp.ready;
         end
 
 
         ram_bus.addr = dcache_bus.mem_req.evict_wb ? 
-                   { dcache_bus.mem_req.evict_tag.ppn, dcache_bus.req.set_idx, 6'b0 } :
-                   { dcache_bus.req.tag.ppn, dcache_bus.req.set_idx, 6'b0 };
+                       { dcache_bus.mem_req.evict_tag.ppn, dcache_bus.req.set_idx, 6'b0 } :
+                       { dcache_bus.req.tag.ppn, dcache_bus.req.set_idx, 6'b0 };
 
         ram_bus.r_en   = dcache_bus.mem_req.fill_req;
         ram_bus.w_en   = dcache_bus.mem_req.evict_wb;
         ram_bus.w_data = dcache_bus.mem_req.evicted_data;
+    end
 
+    always_comb begin
+        if (is_mmio) begin
+            raw_r_data  = mmio_bus.r_data;
+            mem_stall   = is_mem_op && !mmio_bus.ready;
+        end
+        else begin
+            raw_r_data  = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
+            mem_stall   = is_mem_op && !dcache_bus.rsp.ready;
+        end
+    end
+
+    always_comb begin
         dcache_bus.mem_rsp.fill_en = ram_bus.ready && ram_bus.r_en;
         dcache_bus.mem_rsp.fill_data = ram_bus.r_data;
         dcache_bus.mem_rsp.evict_complete = ram_bus.ready && ram_bus.w_en;
+    end
 
 
+    always_comb begin
         trap_bus.take_exc  = is_exc;
         trap_bus.take_mret = is_mret;
         trap_bus.take_sret = is_sret;

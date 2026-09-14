@@ -220,7 +220,7 @@ module csr_file import defs_pkg::*, zicsr_pkg::*; (
         else begin
             if (rw_bus.w_en) begin
                 // can't be deferred to another always_ff.....
-                unique case (rw_bus.w_addr)  // check's done in id, hence exhaustive
+                case (rw_bus.w_addr)  // check's done in id, hence exhaustive
                     CSR_MSTATUS:  mstatus  <= w_data;
                     CSR_MTVEC:    mtvec    <= w_data;
                     CSR_MEPC:     mepc     <= w_data;
@@ -272,6 +272,8 @@ module csr_file import defs_pkg::*, zicsr_pkg::*; (
                     CSR_PMPADDR1: if (!pmpcfg0[15]) pmpaddr[1] <= w_data & PMPADDR_MASK;
                     CSR_PMPADDR2: if (!pmpcfg0[23]) pmpaddr[2] <= w_data & PMPADDR_MASK;
                     CSR_PMPADDR3: if (!pmpcfg0[31]) pmpaddr[3] <= w_data & PMPADDR_MASK;
+
+                    default: ;
                 endcase
             end
 

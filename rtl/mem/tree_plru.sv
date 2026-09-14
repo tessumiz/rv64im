@@ -29,15 +29,17 @@ module tree_plru import defs_pkg::uint, mem_pkg::*; #(
         automatic uint plru_idx;
         automatic uint offset;
 
+        automatic logic [WAY_LOG_W-1:0] temp_v = '0;
+
         // finding a victim; empty lines can be victims as well
         curr_plru = plru[set_idx];
 
         for (uint i = 0; i < WAY_LOG_W; i++) begin
             way_idx  = (WAY_LOG_W - 1) - i;
             plru_idx = (2 ** i) - 1;
-            offset   = (victim_way >> (way_idx + 1));
+            offset   = (temp_v >> (way_idx + 1));
 
-            victim_way[way_idx] = curr_plru[plru_idx + offset];
+            temp_v[way_idx] = curr_plru[plru_idx + offset];
         end
 
         /*
@@ -51,9 +53,16 @@ module tree_plru import defs_pkg::uint, mem_pkg::*; #(
         */
         for (uint i = 0; i < WAYS; i++) begin
             if (!cmp_in_valid[i])
-                victim_way = i[WAY_LOG_W-1 : 0];
+                temp_v = i[WAY_LOG_W-1 : 0];
         end
 
+        victim_way = temp_v;
+    end
+
+    always_comb begin
+        automatic uint way_idx = 0;
+        automatic uint plru_idx = 0;
+        automatic uint offset = 0;
 
         // generating nxt_plru; fills dealt with here
         accessed_way = ctrl.hit ? hit_way : victim_way;

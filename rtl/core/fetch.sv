@@ -53,11 +53,6 @@ module fetch import defs_pkg::*, mem_pkg::*; (
         ram_bus.r_en = icache_bus.mem_req.fill_req;
         ram_bus.addr = { icache_bus.req.tag.ppn, icache_bus.req.set_idx, 6'b0 };
 
-        icache_bus.mem_rsp.fill_en   = ram_bus.ready && ram_bus.r_en;
-        icache_bus.mem_rsp.fill_data = ram_bus.r_data;
-        icache_bus.mem_rsp.evict_complete = 1'b1;
-
-
         // zicsr might have errors, add this later...
 
         // nxt_pc =
@@ -70,7 +65,15 @@ module fetch import defs_pkg::*, mem_pkg::*; (
         //     pc + 4;
 
         nxt_pc = rst ? 64'h8000_0000 : (take_br ? br_targ : pc + 4);
+    end
 
+    always_comb begin
+        icache_bus.mem_rsp.fill_en   = ram_bus.ready && ram_bus.r_en;
+        icache_bus.mem_rsp.fill_data = ram_bus.r_data;
+        icache_bus.mem_rsp.evict_complete = 1'b1;
+    end
+
+    always_comb begin
         out.pc = pc;
         out.ins = icache_bus.rsp.r_data[ pc[5:2] * 32 +: 32 ];
         out.exc.valid = 0;  // No errors for now...
