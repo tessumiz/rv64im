@@ -186,7 +186,8 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         .clk   (clk),
         .rst   (rst),
         .flush (0),  // never flushes (demo purposes)
-        .bus   (dcache_bus)
+        .bus   (dcache_bus),
+        .abort (0)  // change this later
     );
 
 

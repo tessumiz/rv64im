@@ -33,3 +33,11 @@ BG rasterizer
 1. query bg_map + calc tile_px_addr
 2. fetch col idx from tile_ram
 3. fetch from palette, blit iff !transparent
+
+
+BG LUT (basic animations)
+-------------------------
+
+Planning to add a small, optional (decided by MSB) ff indirection,
+so with async reads I somehow can squeeze in basic lut animations
+in the same way...
