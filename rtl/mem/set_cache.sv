@@ -2,6 +2,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     input  logic clk,
     input  logic rst,
     input  logic flush,  // triggers dirty wb fsm
+    input  logic abort,
 
     set_cache_if.cache bus
 );
@@ -46,19 +47,23 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     logic  req_r_en, req_w_en;
     TAG_T  req_tag;
     DATA_T req_w_data;
-    logic [bus.W_MASK_LEN-1:0] req_w_mask;
-    logic [$clog2(SETS)-1:0]   req_set_idx;
+    logic  [bus.W_MASK_LEN-1:0] req_w_mask;
+    logic  [$clog2(SETS)-1:0]   req_set_idx;
 
     logic  is_subword_w;
-    assign is_subword_w = !(&req_w_mask);
+    assign is_subword_w = !(&req_w_mask);  // add is_sub_write to intf instead of wasting gates
+
+    logic  abort_ff;
+    logic  abort_req;  // comb sig
+    assign abort_req = abort || abort_ff;
 
 
     // sigs for writes to cache
-    logic       norm_w;
-    logic       write;
-    way_idx_t   w_way;
-    DATA_T      w_data;
-    logic       w_dirty;
+    logic     norm_w;
+    logic     write;
+    way_idx_t w_way;
+    DATA_T    w_data;
+    logic     w_dirty;
     logic [bus.W_MASK_LEN-1:0] w_wmask;
 
 
@@ -94,11 +99,15 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
     // master fsm
     always_ff @(posedge clk) begin
+        if (!rst && !abort_ff && abort)
+            abort_ff <= 1;
+
         if (rst) begin
             state         <= CACHE_CLR;
             curr_clr_addr <= '0;
             curr_meta     <= '0;  // flush fsm must start with |dirty = 0
             is_flush      <=  0;
+            abort_ff      <=  0;
         end
 
         else if (state == CACHE_CLR) begin
@@ -210,6 +219,12 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
                 default: ;
             endcase
+
+            // right now, ram reads are 1 cycle so this works. Necessarily change this later...
+            if (abort_req && !(state == CACHE_CLR || state == CACHE_FLUSH_DIRTY_SET)) begin
+                state    <= CACHE_IDLE;
+                abort_ff <= 0;
+            end
         end
     end
 
@@ -279,14 +294,16 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         victim_meta = curr_meta[victim_way];
         flush_line  = curr_line[curr_flush_way];
 
-        bus.mem_req.fill_req =
+        bus.mem_req.fill_req = !abort_req && (
             ((state == CACHE_TAG_CMP) && miss && (req_r_en || (req_w_en && is_subword_w))) ||
-            (state == CACHE_REQ_FILL);
+            (state == CACHE_REQ_FILL)
+        );
 
-        bus.mem_req.evict_wb =
+        bus.mem_req.evict_wb = !abort_req && (
             (state == CACHE_TAG_CMP && miss && victim_meta.valid && victim_meta.dirty) ||
             (state == CACHE_EVICT) ||
-            (state == CACHE_FLUSH_DIRTY_SET && curr_way_dirty);
+            (state == CACHE_FLUSH_DIRTY_SET && curr_way_dirty)
+        );
 
         bus.mem_req.evict_tag    = (state == CACHE_FLUSH_DIRTY_SET) ? flush_line.tag  : victim_line.tag;
         bus.mem_req.evicted_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_line.data : victim_line.data;
@@ -297,7 +314,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
             (state == CACHE_TAG_CMP && req_w_en && !(miss && is_subword_w)) ||
             (state == CACHE_SUBWORD_W_FILL);
 
-        write  = norm_w || (state == CACHE_REQ_FILL && bus.mem_rsp.fill_en);
+        write  = !abort_req && (norm_w || (state == CACHE_REQ_FILL && bus.mem_rsp.fill_en));
         w_way  = (norm_w && hit) ? hit_way : victim_way;
 
 
