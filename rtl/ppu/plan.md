@@ -4,11 +4,9 @@ Demo: A short vertical slice of a castle level from supertux
 >> MMIO starts at 0x0400_0000, so all the addrs below would be offsets from this.
    (0000-0007 is KEYINP)
 
->> Scrolls assume +ve offset starting from bot-left
+>> Scrolls assume +ve offset starting from top-left
 
-* BG_SCROLL :  8B,  (0008 to 000F),  [Y: 4B, X: 4B]
-
-* VBLANK : 8B (check LSB),  (0010 to 0017)
+* CTRL :  8B,  (0008 to 000F),  [VBLANK: bit-32, Y: 2B, X: 2B]
 
 * PALETTE :  256 colors, RGB555,  512B,  (0200 to 03FF)
 
@@ -25,3 +23,13 @@ Demo: A short vertical slice of a castle level from supertux
 
 
 >> Not going to use double-buffering for the MVP
+
+
+
+BG rasterizer
+-------------
+
+0. find the absolute coords first
+1. query bg_map + calc tile_px_addr
+2. fetch col idx from tile_ram
+3. fetch from palette, blit iff !transparent
