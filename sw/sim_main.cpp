@@ -116,7 +116,7 @@ int main(int argc, char **argv)
     top->eval();
 
     InitWindow(W, H, " ");
-    SetTargetFPS(60);
+    // SetTargetFPS(60);
 
     std::vector<Color> pixels(W * H);
 
