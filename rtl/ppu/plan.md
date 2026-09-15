@@ -18,7 +18,11 @@ Demo: A short vertical slice of a castle level from supertux
 * TILERAM : 16x16, 8bpp,  16KB (256B/tile => 64 tiles),  (2000 to 5FFF)
   (no metatiles for now)
 
-* OAM : <to be decided...>
+* OAM : [pad/rsrv: [63:43], valid: [42], flip_h: [41], flip_y: [40],
+        tile_id: [39:32], Y_signed: [31:16], X_signed: [15:0]]
+        
+        512B (64 spr * 8B),  (6000 to 61FF)
+
 
 * FRM_BUFF : 320x240, RGB555, 150KB,  (0x0401_0000 to 0x0403_57FF)
 
@@ -40,6 +44,16 @@ BG rasterizer
 BG LUT (basic animations)
 -------------------------
 
-Planning to add a small, optional (decided by MSB) ff indirection,
-so with async reads I somehow can squeeze in basic lut animations
-in the same way...
+Squeezed a 32-sized ff indirection at the end of stage-1 (bg_map fetch).
+Anim lut ids must have their MSB set.
+
+Not sure how this affects the crit path.
+
+
+OAM
+---
+
+I've split the whole frame into 3;  BG, OAM, VBLANK. Now, OAM can reuse BG's
+pipe; the only diff is horz/vert flips, which is actually trivial with negation...
+
+X and Y are signed, unlike BG.

@@ -11,6 +11,8 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
     logic [7:0]  anim_lut [SIZE_ANIM_LUT - 1:0];
     logic [7:0]  bg_map   [SIZE_BG_MAP - 1:0];
     logic [7:0]  tile_ram [SIZE_TILE_RAM - 1:0];
+    oam_t        oam [63:0];
+
     logic [15:0] frm_buff [SIZE_FRM_BUFF/2 - 1:0] /* verilator public_flat_rd */;
 
 
@@ -21,7 +23,8 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
     logic [15:0] pal_idx;
     logic [31:0] anim_lut_idx;
     logic [15:0] bg_idx;
-    logic [15:0]  tile_idx;
+    logic [15:0] tile_idx;
+    logic [5:0]  oam_idx;
 
     always_comb begin
         addr = mmio_bus.addr;
@@ -32,6 +35,7 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
         anim_lut_idx = ((addr & ~64'h7) - ADDR_ANIM_LUT);
         bg_idx       = ((addr & ~64'h7) - ADDR_BG_MAP);
         tile_idx     = ((addr & ~64'h7) - ADDR_TILE_RAM);
+        oam_idx      = ((addr & ~64'h7) - ADDR_OAM) / 8;
     end
 
 
@@ -47,13 +51,6 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
     logic [31:0] frm_cyc;
 
 
-    localparam uint
-        BG_PIPE_DELAY = 3,
-        BG_FETCH_CYC  = SCR_W * SCR_H,
-        BG_ACTIVE_CYC = BG_FETCH_CYC  + BG_PIPE_DELAY,
-        BG_TOTAL_CYC  = BG_ACTIVE_CYC + VBLANK_CYC;
-
-
     logic [11:0] bg_map_addr;
     logic [13:0] tile_px_addr;
     logic [7:0]  color_idx;
@@ -63,7 +60,8 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
         if (rst) begin
             mmio_bus.ready  <= 0;
             mmio_bus.r_data <= 0;
-            ctrl <= 0;
+
+            ctrl    <= 0;
             scr_x   <= 0;
             scr_y   <= 0;
             frm_cyc <= 0;
@@ -72,6 +70,7 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
             col_q  <= '0;
             blit_q <= '0;
         end
+
         else begin
             mmio_bus.ready <= 0;
 
@@ -130,23 +129,30 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
                         for (int i = 0; i < 8; i++)
                             mmio_bus.r_data[i*8 +: 8] <= tile_ram[tile_idx + i];
                 end
+
+                else if (addr >= ADDR_OAM && addr < ADDR_OAM + SIZE_OAM) begin
+                    if (w_en)
+                        for (int i = 0; i < 8; i++)
+                            if (mmio_bus.w_mask[i])
+                                oam[oam_idx][i*8 +: 8] <= mmio_bus.w_data[i*8 +: 8];
+                    
+                    if (r_en)
+                        mmio_bus.r_data <= oam[oam_idx];
+                end
             end
+
 
             if (frm_cyc == BG_TOTAL_CYC - 1) begin
                 scr_x    <= 0;
                 scr_y    <= 0;
                 frm_cyc  <= 0;
-                ctrl.vblank <= 0;
             end
-            else begin
+            else
                 frm_cyc <= frm_cyc + 1;
 
-                if (frm_cyc == BG_ACTIVE_CYC - 1)
-                    ctrl.vblank <= 1;
-            end
 
             // find screen coord
-            if (!ctrl.vblank && frm_cyc < BG_FETCH_CYC) begin
+            if (frm_cyc < BG_FETCH_CYC) begin
                 logic [9:0] abs_x, abs_y;
 
                 abs_x = scr_x + ctrl.scroll_x[9:0];
@@ -164,7 +170,48 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
                 end
                 else scr_x <= scr_x + 1;
             end
-            else tile_q.valid <= 0;  // ins nops during vblank
+
+            else if (frm_cyc >= BG_ACTIVE_CYC && frm_cyc < OAM_FETCH_CYC) begin
+                logic [13:0] oam_cyc;
+                logic [5:0]  spr_idx;
+                oam_t        spr;
+                
+                logic [3:0]  px_x, px_y;
+                logic signed [16:0] screen_x, screen_y;
+
+                ctrl.state <= OAM;
+
+                oam_cyc = 14'(frm_cyc - BG_ACTIVE_CYC);
+
+                spr_idx = oam_cyc[13:8];
+                px_y    = oam_cyc[7:4];
+                px_x    = oam_cyc[3:0];
+
+                spr = oam[spr_idx];
+                
+                screen_x = spr.x + signed'({1'b0, px_x});
+                screen_y = spr.y + signed'({1'b0, px_y});
+
+                if (spr.valid && (screen_x >= 0 && screen_x < SCR_W) && (screen_y >= 0 && screen_y < SCR_H)) begin
+                    tile_q.valid   <= 1;
+                    tile_q.is_spr  <= 1;
+                    tile_q.x       <= screen_x[8:0];
+                    tile_q.y       <= screen_y[7:0];
+                    tile_q.tile_id <= spr.tile_id;
+                    
+                    tile_q.sub_x   <= px_x ^ {4{spr.flip_h}};
+                    tile_q.sub_y   <= px_y ^ {4{spr.flip_v}};
+                end
+                else
+                    tile_q.valid <= 0;
+            end
+
+            else begin
+                if (frm_cyc >= OAM_ACTIVE_CYC)
+                    ctrl.state <= VBLANK;
+
+                tile_q.valid <= 0;
+            end
 
 
             // stages
@@ -175,22 +222,26 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
             // 1; fetch tile-idx  + sub-px inside it (optional anim-lut)
             // think about the combinational path delay here...
             if (tile_q.valid) begin
-                logic [7:0] fetched_tile;
-                logic [7:0] actual_tile;
-                logic       is_anim;
 
-                logic [3:0] sub_x, sub_y;
-
-                fetched_tile = bg_map[bg_map_addr];
-                is_anim      = fetched_tile[7];
-                actual_tile  = is_anim ? anim_lut[fetched_tile[4:0]] : fetched_tile;
-
+                if (tile_q.is_spr)
+                    tile_px_addr <= {tile_q.tile_id[5:0], tile_q.sub_y, tile_q.sub_x};
                 
-                // 4' takes the mod
-                sub_x = 4'(tile_q.x + ctrl.scroll_x);
-                sub_y = 4'(tile_q.y + ctrl.scroll_y);
-                
-                tile_px_addr <= {actual_tile[5:0], sub_y, sub_x};
+                else begin
+                    logic [7:0] fetched_tile;
+                    logic [7:0] actual_tile;
+                    logic       is_anim;
+
+                    logic [3:0] sub_x, sub_y;
+
+                    fetched_tile = bg_map[bg_map_addr];
+                    is_anim      = fetched_tile[7];
+                    actual_tile  = is_anim ? anim_lut[fetched_tile[4:0]] : fetched_tile;
+
+                    sub_x = 4'(tile_q.x + ctrl.scroll_x);
+                    sub_y = 4'(tile_q.y + ctrl.scroll_y);
+                    
+                    tile_px_addr <= {actual_tile[5:0], sub_y, sub_x};
+                end
             end
 
             // 2; fetch col idx
@@ -209,6 +260,7 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
                 
                 // without this, past screen garbage ilngers
                 // for the non-mvp, we'll include a clr routine...
+                // maybe let oam tiles have transparent pixels (???)
                 else
                     frm_buff[fb_addr] <= {1'b1, 15'b0};
             end
