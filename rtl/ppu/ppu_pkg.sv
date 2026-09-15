@@ -15,6 +15,9 @@ package ppu_pkg;
         ADDR_PALETTE   = 64'h0400_0200,
         SIZE_PALETTE   = 512,
 
+        ADDR_ANIM_LUT  = 64'h0400_0400,
+        SIZE_ANIM_LUT  = 32,
+
         ADDR_BG_MAP    = 64'h0400_1000,
         SIZE_BG_MAP    = 4096,
 

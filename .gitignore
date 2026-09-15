@@ -6,3 +6,4 @@ assumptions.md
 raylib
 *.bin
 *.elf
+*.log

@@ -10,6 +10,8 @@ Demo: A short vertical slice of a castle level from supertux
 
 * PALETTE :  256 colors, RGB555,  512B,  (0200 to 03FF)
 
+* ANIM LUT : 32 translations,  (0400 to 0401F)
+
 * BG : 64x64, 1B tile ids,  4KB,  (1000 to 1FFF)
   (will add more BG layers later)
 
