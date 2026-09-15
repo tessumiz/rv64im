@@ -159,16 +159,19 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
                 abs_y = scr_y + ctrl.scroll_y[9:0];
 
                 bg_map_addr  <= {abs_y[9:4], abs_x[9:4]};  // div 16
-                
-                tile_q.x     <= scr_x;
-                tile_q.y     <= scr_y;
-                tile_q.valid <= 1;
-                
+
                 if (scr_x == SCR_W - 1) begin  // y-overflw handled by tot cyc guard above
                     scr_x <= 0;
                     scr_y <= scr_y + 1;
                 end
-                else scr_x <= scr_x + 1;
+                else
+                    scr_x <= scr_x + 1;
+                
+                tile_q.x      <= scr_x;
+                tile_q.y      <= scr_y;
+                tile_q.valid  <= 1;
+                ctrl.state    <= BG;
+                tile_q.is_spr <= 0;
             end
 
             else if (frm_cyc >= BG_ACTIVE_CYC && frm_cyc < OAM_FETCH_CYC) begin
@@ -260,8 +263,10 @@ module ppu import defs_pkg::uint, ppu_pkg::*; (
                 
                 // without this, past screen garbage ilngers
                 // for the non-mvp, we'll include a clr routine...
-                // maybe let oam tiles have transparent pixels (???)
-                else
+
+                // Fix; OAMs are allowed to be transparent
+                // the black-screen bg bug is gone now
+                else if (!blit_q.is_spr)
                     frm_buff[fb_addr] <= {1'b1, 15'b0};
             end
         end

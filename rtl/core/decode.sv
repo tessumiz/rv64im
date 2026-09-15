@@ -101,7 +101,7 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
 
 // logic        dbg_valid            /* verilator public_flat */;
 // logic [63:0] dbg_pc               /* verilator public_flat */;
-// logic [31:0] dbg_ins              /* verilator public_flat */;
+logic [31:0] dbg_ins              /* verilator public_flat */;
 
 // logic [4:0]  dbg_rs1_a            /* verilator public_flat */;
 // logic [4:0]  dbg_rs2_a            /* verilator public_flat */;
@@ -131,7 +131,7 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
 
 // assign dbg_valid = if_id.valid;
 // assign dbg_pc    = if_id.pc;
-// assign dbg_ins   = if_id.ins;
+assign dbg_ins   = if_id.ins;
 
 // assign dbg_rs1_a = rs1_a;
 // assign dbg_rs2_a = rs2_a;

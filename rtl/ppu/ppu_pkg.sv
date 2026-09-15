@@ -11,14 +11,14 @@ package ppu_pkg;
     } ppu_ctrl_t;
 
     typedef struct packed {
-        logic [20:0] _padding;
+        logic [20:0] _pad;
 
         logic valid;
         logic flip_h;
         logic flip_v;
         logic [7:0]  tile_id;
-        logic [15:0] y;
-        logic [15:0] x;
+        logic signed [15:0] y;
+        logic signed [15:0] x;
     } oam_t;
 
 
@@ -50,15 +50,14 @@ package ppu_pkg;
     localparam uint SCR_W = 320, SCR_H = 240;
 
 
-    localparam uint
-        NET_CYC    = 100000,  // arbitrary
-        OAM_CYC    = 16384,
-        VBLANK_CYC = NET_CYC - OAM_CYC;
-
 
     localparam uint
+        NET_CYC = 100000,  // arbitrary
+        OAM_CYC = 16384,
         BG_PIPE_DELAY = 3,
+
         BG_FETCH_CYC  = SCR_W * SCR_H,
+        VBLANK_CYC    = NET_CYC - OAM_CYC - BG_FETCH_CYC,
         BG_ACTIVE_CYC = BG_FETCH_CYC  + BG_PIPE_DELAY,
 
         OAM_FETCH_CYC  = BG_ACTIVE_CYC + OAM_CYC,
