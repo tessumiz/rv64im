@@ -22,17 +22,46 @@
 #define STATE_VBLANK 2
 #define PPU_STATE(ctrl) (((ctrl) >> 32) & 3)
 
-#define WHITE  0x7FFF
-#define SILVER 0x39CE
-#define RED    0x0E0E
-#define GREEN  0x0EE0
-#define BLUE   0x3C0E
 
-#define PAL_BALL   1
-#define PAL_WALL   2
-#define PAL_BRICK1 3
-#define PAL_BRICK2 4
-#define PAL_PAD    5
+// colors (1 -> 3 getting darker)
+#define WHITE 0x7FFF
+
+#define SILVER1 0x5AD6
+#define SILVER2 0x39CE
+#define SILVER3 0x2108
+
+#define RED1 0x1F1F
+#define RED2 0x0E0E
+#define RED3 0x0404
+
+#define GREEN1 0x1FE0
+#define GREEN2 0x0EE0
+#define GREEN3 0x04E0
+
+#define BLUE1 0x7E1F
+#define BLUE2 0x3C0E
+#define BLUE3 0x1804
+
+
+// palette
+#define PAL_BALL1    1
+
+#define PAL_WALL1    2
+#define PAL_WALL2    3
+#define PAL_WALL3    4
+
+#define PAL_BRICK1_1 5
+#define PAL_BRICK1_2 6
+#define PAL_BRICK1_3 7
+
+#define PAL_BRICK2_1 8
+#define PAL_BRICK2_2 9
+#define PAL_BRICK2_3 10
+
+#define PAL_PAD1     11
+#define PAL_PAD2     12
+#define PAL_PAD3     13
+
 
 #define TILE_WALL   1
 #define TILE_BRICK1 2
@@ -59,11 +88,16 @@
 #define BALL_SPEED_Y 2
 
 
-void gen_tile(int tile_id, u8 col) {
+void gen_tile(int tile_id, u8 light, u8 mid, u8 dark)
+{
     volatile u8 *ram = TILE_RAM + (tile_id * 256);
-    for (int y = 0; y < TILE_SIZE; y++) {
-        for (int x = 0; x < TILE_SIZE; x++)
-            ram[y * TILE_SIZE + x] = col;
+
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) {
+            ram[y * 16 + x] =
+                (x == 0 || y == 0) ? light :
+                (x == 15 || y == 15) ? dark  : mid;
+        }
     }
 }
 
@@ -74,17 +108,35 @@ void set_oam_attr(int idx, int x, int y, int tile_id) {
 
 
 int main(void) {
-    PALETTE[PAL_BALL]   = WHITE;
-    PALETTE[PAL_WALL]   = SILVER;
-    PALETTE[PAL_BRICK1] = RED;
-    PALETTE[PAL_BRICK2] = GREEN;
-    PALETTE[PAL_PAD]    = BLUE;
+    // ball
+    PALETTE[PAL_BALL1] = WHITE;
 
-    gen_tile(TILE_WALL,   PAL_WALL);
-    gen_tile(TILE_BRICK1, PAL_BRICK1);
-    gen_tile(TILE_BRICK2, PAL_BRICK2);
-    gen_tile(TILE_PAD,    PAL_PAD);
-    gen_tile(TILE_BALL,    PAL_BALL);
+    // wall
+    PALETTE[PAL_WALL1] = SILVER1;
+    PALETTE[PAL_WALL2] = SILVER2;
+    PALETTE[PAL_WALL3] = SILVER3;
+
+    // red bricks
+    PALETTE[PAL_BRICK1_1] = RED1;
+    PALETTE[PAL_BRICK1_2] = RED2;
+    PALETTE[PAL_BRICK1_3] = RED3;
+
+    // green bricks
+    PALETTE[PAL_BRICK2_1] = GREEN1;
+    PALETTE[PAL_BRICK2_2] = GREEN2;
+    PALETTE[PAL_BRICK2_3] = GREEN3;
+
+    // paddle
+    PALETTE[PAL_PAD1] = BLUE1;
+    PALETTE[PAL_PAD2] = BLUE2;
+    PALETTE[PAL_PAD3] = BLUE3;
+
+
+    gen_tile(TILE_WALL,   PAL_WALL1,    PAL_WALL2,    PAL_WALL3);
+    gen_tile(TILE_BRICK1, PAL_BRICK1_1, PAL_BRICK1_2, PAL_BRICK1_3);
+    gen_tile(TILE_BRICK2, PAL_BRICK2_1, PAL_BRICK2_2, PAL_BRICK2_3);
+    gen_tile(TILE_PAD,    PAL_PAD1,     PAL_PAD2,     PAL_PAD3);
+    gen_tile(TILE_BALL,   PAL_BALL1,    PAL_BALL1,    PAL_BALL1);
 
 
     // clr is mandatory...
@@ -143,17 +195,17 @@ int main(void) {
         if (ball_x <= WALL_WIDTH) { 
             ball_dx = -ball_dx;
             ball_x  = WALL_WIDTH;
-            ball_x      = WALL_WIDTH;
+            ball_x  = WALL_WIDTH;
         }
         if (ball_x >= SCR_W - WALL_WIDTH - BALL_SIZE) { 
             ball_dx = -ball_dx;
             ball_x  = SCR_W - WALL_WIDTH - BALL_SIZE;
-            ball_x      = ball_x;
+            ball_x  = ball_x;
         }
         if (ball_y <= WALL_WIDTH) { 
             ball_dy = -ball_dy;
             ball_y  = WALL_WIDTH;
-            ball_y      = WALL_WIDTH;
+            ball_y  = WALL_WIDTH;
         }
 
         if (ball_y > SCR_H) {

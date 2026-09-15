@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 
     auto *top = new Vsoc;
 
-    load_bin(top, "sw/main.bin");
+    load_bin(top, "sw/arkanoids.bin");
 
     top->clk = 0;
     top->rst = 1;

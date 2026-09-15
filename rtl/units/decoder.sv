@@ -99,7 +99,8 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
                 ctrl.is_wd_op = (op == OP_REGW);
                 ctrl.wb       = 1;
 
-                if (op == OP_REG) begin
+                // Fix; word-sized muldiv wasn't there cuz op == OP_REGW wasn't either...
+                if (op == OP_REG || op == OP_REGW) begin
                     ctrl.is_mul = (f7 == F7_1) && !f3[2];
                     ctrl.is_div = (f7 == F7_1) &&  f3[2];
                 end
