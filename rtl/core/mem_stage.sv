@@ -43,9 +43,15 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
     ) dcache_bus ();
 
 
+    logic [63:0] dmem [16383:0] /* verilator public_flat */;
+    logic [13:0]  dmem_idx;
+
+
     always_comb begin
         addr = ex_mem.ex_res;
-        word_idx = addr[5:3]; 
+        word_idx = addr[5:3];
+
+        dmem_idx = addr[16:3];
 
         mem_cause = ex_mem.exc.valid ? ex_mem.exc.cause :
                     64'(ex_mem.ctrl.mem_w ? EXC_STORE_MISALIGNED : EXC_LOAD_MISALIGNED);
@@ -131,8 +137,8 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
                        { dcache_bus.mem_req.evict_tag.ppn, dcache_bus.req.set_idx, 6'b0 } :
                        { dcache_bus.req.tag.ppn, dcache_bus.req.set_idx, 6'b0 };
 
-        ram_bus.r_en   = dcache_bus.mem_req.fill_req;
-        ram_bus.w_en   = dcache_bus.mem_req.evict_wb;
+        ram_bus.r_en   = dcache_bus.mem_req.fill_req && 0;
+        ram_bus.w_en   = dcache_bus.mem_req.evict_wb && 0;
         ram_bus.w_data = dcache_bus.mem_req.evicted_data;
     end
 
@@ -142,8 +148,11 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
             mem_stall  = is_mem_op && !mmio_bus.ready;
         end
         else begin
-            raw_r_data = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
-            mem_stall  = is_mem_op && !dcache_bus.rsp.ready;
+            // raw_r_data = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
+            // mem_stall  = is_mem_op && !dcache_bus.rsp.ready;
+
+            raw_r_data = dmem[dmem_idx];
+            mem_stall  = 0;
         end
     end
 
@@ -182,13 +191,26 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         fwd_data = out.data;
     end
 
-    set_cache u_dcache (
-        .clk   (clk),
-        .rst   (rst),
-        .flush (0),  // never flushes (demo purposes)
-        .bus   (dcache_bus),
-        .abort (0)  // change this later
-    );
+    // set_cache u_dcache (
+    //     .clk   (clk),
+    //     .rst   (rst),
+    //     .flush (0),  // never flushes (demo purposes)
+    //     .bus   (dcache_bus),
+    //     .abort (0)  // change this later
+    // );
+
+    always_ff @(posedge clk) begin
+        if (is_mem_op && ex_mem.ctrl.mem_w && !is_mmio) begin
+            if (lsu_w_mask[0]) dmem[dmem_idx][7:0]   <= lsu_w_data_fmt[7:0];
+            if (lsu_w_mask[1]) dmem[dmem_idx][15:8]  <= lsu_w_data_fmt[15:8];
+            if (lsu_w_mask[2]) dmem[dmem_idx][23:16] <= lsu_w_data_fmt[23:16];
+            if (lsu_w_mask[3]) dmem[dmem_idx][31:24] <= lsu_w_data_fmt[31:24];
+            if (lsu_w_mask[4]) dmem[dmem_idx][39:32] <= lsu_w_data_fmt[39:32];
+            if (lsu_w_mask[5]) dmem[dmem_idx][47:40] <= lsu_w_data_fmt[47:40];
+            if (lsu_w_mask[6]) dmem[dmem_idx][55:48] <= lsu_w_data_fmt[55:48];
+            if (lsu_w_mask[7]) dmem[dmem_idx][63:56] <= lsu_w_data_fmt[63:56];
+        end
+    end
 
 
 // // ============================================================

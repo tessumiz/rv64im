@@ -14,7 +14,7 @@ module alu (
         shamt = is_wd_op ? {1'b0, b[4:0]} : b[5:0];
 
         a32 = a[31:0];
-        
+
         case (alu_op)
             4'b0000: res = a + b;
             4'b1000: res = a - b;

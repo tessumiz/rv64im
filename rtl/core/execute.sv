@@ -27,12 +27,11 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
     logic [3:0]  alu_op;
 
     always_comb begin
-        if (id_ex.ctrl.mem_r || id_ex.ctrl.mem_w || 
-           (id_ex.ctrl.alu_src1_pc && !id_ex.ctrl.jmp && !id_ex.ctrl.br)) begin
-            alu_op = 4'b0000;
+        if (id_ex.ctrl.mem_r || id_ex.ctrl.mem_w ||  id_ex.ctrl.alu_src1_pc) begin
+            alu_op = 4'b0000;  // + for mem ops / auipc / br
         end
         else if (id_ex.ctrl.alu_src2_imm && (id_ex.f3 != 3'b001 && id_ex.f3 != 3'b101)) begin
-            alu_op = {1'b0, id_ex.f3};
+            alu_op = {1'b0, id_ex.f3};  // if imm and !shft
         end
         else begin
             alu_op = {id_ex.f7[5], id_ex.f3}; 
@@ -47,10 +46,7 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
         .alu_out  (alu_out)
     );
 
-    assign br_targ =
-        (id_ex.ctrl.br || id_ex.ctrl.jmp)
-        ? ((alu_in1 + alu_in2) & ~64'd1)
-        : (alu_out & ~64'd1);
+    assign br_targ = (alu_out & ~64'd1);
 
     bcu u_bcu (
         .rs1     (rs1_fwd),

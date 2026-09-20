@@ -31,17 +31,17 @@ module soc import defs_pkg::*; (
         .ram_bus (main_ram.master)
     );
 
-    ram #(.SIZE_BYTES (1 * 1024 * 1024))
-    u_ram (
-        .clk (clk),
-        .bus (main_ram.slave)
-    );
+    // ram #(.SIZE_BYTES (1 * 1024 * 1024))
+    // u_ram (
+    //     .clk (clk),
+    //     .bus (main_ram.slave)
+    // );
 
-    ppu u_ppu (
-        .clk      (clk),
-        .rst      (rst),
-        .mmio_bus (ppu_mmio.slave)
-    );
+    // ppu u_ppu (
+    //     .clk      (clk),
+    //     .rst      (rst),
+    //     .mmio_bus (ppu_mmio.slave)
+    // );
 
 
     always_comb begin

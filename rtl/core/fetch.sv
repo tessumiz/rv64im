@@ -98,24 +98,29 @@ module fetch import defs_pkg::*, mem_pkg::*; (
     end
 
 
+    logic [31:0] imem [16383:0] /* verilator public_flat */;
+
+
     always_comb begin
         out.pc = pc;
-        out.ins = ready_pending ? pending_ins : icache_bus.rsp.r_data[pc[5:2] * 32 +: 32];
+        // out.ins = ready_pending ? pending_ins : icache_bus.rsp.r_data[pc[5:2] * 32 +: 32];
+        out.ins = imem[pc[15:2]];
         out.exc.valid = 1'b0;
         out.valid = 1;
     end
 
 
-    set_cache u_icache (
-        .clk   (clk),
-        .rst   (rst),
-        .flush (0),  // icache doesn't need to flush
-        .bus   (icache_bus),
-        .abort (flush)
-    );
+    // set_cache u_icache (
+    //     .clk   (clk),
+    //     .rst   (rst),
+    //     .flush (0),  // icache doesn't need to flush
+    //     .bus   (icache_bus),
+    //     .abort (flush)
+    // );
 
 
-    assign icache_stall = !(ready_pending || icache_bus.rsp.ready);
+    // assign icache_stall = !(ready_pending || icache_bus.rsp.ready);
+    assign icache_stall = 0;
 
 
     gen_reg #(.T(logic [63:0]))
@@ -130,7 +135,7 @@ module fetch import defs_pkg::*, mem_pkg::*; (
 
 // logic [63:0] dbg_pc             /* verilator public_flat */;
 // logic [63:0] dbg_nxt_pc         /* verilator public_flat */;
-logic [31:0] dbg_ins            /* verilator public_flat */;
+// logic [31:0] dbg_ins            /* verilator public_flat */;
 
 // logic        dbg_stall          /* verilator public_flat */;
 // logic        dbg_flush          /* verilator public_flat */;
@@ -149,7 +154,7 @@ logic [31:0] dbg_ins            /* verilator public_flat */;
 
 // assign dbg_pc            = pc;
 // assign dbg_nxt_pc        = nxt_pc;
-assign dbg_ins           = out.ins;
+// assign dbg_ins           = out.ins;
 
 // assign dbg_stall         = stall;
 // assign dbg_flush         = flush;

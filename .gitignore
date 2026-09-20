@@ -7,3 +7,5 @@ raylib
 *.bin
 *.elf
 *.log
+tests/
+riscv-tests/
