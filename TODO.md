@@ -15,6 +15,8 @@
 
 
 ## PENDING
+- [ ] flush must only unset ctrl.valid and exc.valid; power optimization
+
 - [ ] tweak the invariant parameteres of every cache/tlb (including pwc and plrus)
 
 - [ ] synth bugs in bram access; flatten ways using a for (or generate)  (???)

@@ -1,4 +1,4 @@
-module pipeline import defs_pkg::*; (
+module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
     input logic clk,
     input logic rst,
 
@@ -16,18 +16,10 @@ module pipeline import defs_pkg::*; (
     ex_mem_t ex_mem_d, ex_mem_q;
     mem_wb_t mem_wb_d, mem_wb_q;
 
-    logic take_br;
-    logic take_mepc;
-    logic take_sepc;
-    logic take_mtvec;
-    logic take_stvec;
-
+    logic        take_br;
     logic [63:0] br_targ;
-    logic [63:0] mepc_targ;
-    logic [63:0] mtvec_targ;
 
-    logic [63:0] sepc_targ;
-    logic [63:0] stvec_targ;
+    trap_t       trap_sig;
 
     logic [63:0] csr_br_targ;
 
@@ -112,17 +104,7 @@ module pipeline import defs_pkg::*; (
         .take_br    (take_br),
         .br_targ    (br_targ),
 
-        .take_mepc  (take_mepc),
-        .mepc_targ  (mepc_targ),
-
-        .take_mtvec (take_mtvec),
-        .mtvec_targ (mtvec_targ),
-
-        .take_sepc  (take_sepc),
-        .sepc_targ  (sepc_targ),
-
-        .take_stvec (take_stvec),
-        .stvec_targ (stvec_targ),
+        .trap       (trap_sig),
 
         .take_csr_br (csr_flush),
         .csr_br_targ (csr_br_targ),
@@ -148,6 +130,7 @@ module pipeline import defs_pkg::*; (
     ex_mem_t ex_mem_d_raw;
 
     execute u_execute (
+        .clk      (clk),  // for debugging
         .id_ex    (id_ex_q),
 
         .fwd_sig  (fwd_sig),
@@ -228,7 +211,8 @@ module pipeline import defs_pkg::*; (
     // logic is_mul, is_div;
 
     // logic  mem_branch;
-    // assign mem_branch = take_mepc  || take_mtvec || take_sepc || take_stvec || csr_flush;
+    // assign mem_branch = trap_sig.take_mepc  || trap_sig.take_mtvec ||
+    //                     trap_sig.take_sepc  || trap_sig.take_stvec || csr_flush;
 
 
     // always_comb begin
@@ -260,7 +244,6 @@ module pipeline import defs_pkg::*; (
     //     .out (div_out)
     // );
 
-
     // wb_arbiter u_wb_arbiter (
     //     .mul_out  (mul_out),
     //     .div_out  (div_out),
@@ -279,17 +262,7 @@ module pipeline import defs_pkg::*; (
         .rw_bus   (u_csr_rw_bus.slave),
         .trap_bus (u_csr_trap_bus.slave),
 
-        .mepc_out  (mepc_targ),
-        .mtvec_out (mtvec_targ),
-
-        .sepc_out  (sepc_targ),
-        .stvec_out (stvec_targ),
-
-        .take_mepc  (take_mepc),
-        .take_mtvec (take_mtvec),
-
-        .take_sepc  (take_sepc),
-        .take_stvec (take_stvec),
+        .trap_sig (trap_sig),
 
         .priv      (priv),
         .satp_out  (satp)
@@ -342,7 +315,11 @@ module pipeline import defs_pkg::*; (
     // flush / stall
     logic branch;
 
-    assign branch = take_mepc || take_mtvec || take_sepc || take_stvec || csr_flush || take_br;
+    assign branch = trap_sig.take_mepc  ||
+                    trap_sig.take_mtvec ||
+                    trap_sig.take_sepc  ||
+                    trap_sig.take_stvec ||
+                    csr_flush || take_br;
 
     assign if_id_stall  = mem_stall || ld_use_haz;
     assign id_ex_stall  = mem_stall;

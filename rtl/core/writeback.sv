@@ -19,9 +19,7 @@ module writeback import defs_pkg::*; (
         rd       = mem_wb.rd;
         fwd_data = mem_wb.data;
 
-        // neutered again
-        csr_w_bus.w_en = 0;
-        // csr_w_bus.w_en   = mem_wb.ctrl.is_csr && mem_wb.ctrl.csr_we;
+        csr_w_bus.w_en   = mem_wb.ctrl.csr_we;  // gating with is_csr is unnecessary here
         csr_w_bus.w_addr = mem_wb.csr_addr;
         csr_w_bus.w_data = mem_wb.csr_new_data;
     end

@@ -1,5 +1,4 @@
 interface csr_rw_if;
-    logic        r_en;
     logic [11:0] r_addr;
     logic [63:0] r_data;
     logic        r_exc;
@@ -9,7 +8,7 @@ interface csr_rw_if;
     logic [63:0] w_data;
 
     modport r_master (
-        output r_addr, r_en,
+        output r_addr,  // no r_en; continuous read
         input  r_data, r_exc
     );
 

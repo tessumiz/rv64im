@@ -27,9 +27,10 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
     logic [63:0] raw_r_data;
     logic [63:0] lsu_w_data_fmt;
     logic [7:0]  lsu_w_mask;
-    
-    logic        is_misaligned;
-    logic [63:0] mem_cause;
+
+    logic        misaligned, lsu_misaligned;
+    logic [63:0] cause;
+    logic [63:0] tval;
     
     logic  is_exc, is_mret, is_sret, is_irq;
     logic  safe, is_mem_op, is_mmio;
@@ -44,37 +45,36 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 
 
     logic [63:0] dmem [16383:0] /* verilator public_flat */;
-    logic [13:0]  dmem_idx;
+    logic [13:0] dmem_idx;
 
 
     always_comb begin
-        addr = ex_mem.ex_res;
+        addr     = ex_mem.ex_res;
         word_idx = addr[5:3];
-
         dmem_idx = addr[16:3];
 
-        mem_cause = ex_mem.exc.valid ? ex_mem.exc.cause :
-                    64'(ex_mem.ctrl.mem_w ? EXC_STORE_MISALIGNED : EXC_LOAD_MISALIGNED);
+        is_mem_op  = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w);  // ungated
+        misaligned = is_mem_op && lsu_misaligned;
 
-        is_exc  = 0; 
-        is_mret = 0;
-        is_sret = 0;
+        is_exc  = (ex_mem.exc.valid || misaligned);
+        is_mret = ex_mem.exc.is_mret;
+        is_sret = ex_mem.exc.is_sret;
+
+        cause   = ex_mem.exc.valid ? ex_mem.exc.cause :
+                  64'(ex_mem.ctrl.mem_w ? EXC_STORE_MISALIGNED : EXC_LOAD_MISALIGNED);
+        
+        tval    = ex_mem.exc.valid ? ex_mem.exc.tval : addr;
+
         is_irq  = 0;
-
-        // is_exc  = (ex_mem.exc.valid || is_misaligned);
-        // is_mret = ex_mem.exc.is_mret;
-        // is_sret = ex_mem.exc.is_sret;
         // is_irq  = trap_bus.irq_pending;
 
         safe = !(is_exc || is_mret || is_sret || is_irq);
-        is_mem_op = (ex_mem.ctrl.mem_r || ex_mem.ctrl.mem_w) && safe;
 
         // hardcoded PMA; synths to a redn-OR tree for addr[63:26]
         is_mmio = (addr >= 64'h0400_0000 && addr < 64'h0500_0000);
     end
 
     lsu u_lsu (
-        .is_mem_op     (is_mem_op),
         .f3            (ex_mem.f3),
         .addr          (addr),
 
@@ -85,7 +85,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         .r_data_fmt    (r_data),
         .w_data_fmt    (lsu_w_data_fmt),
 
-        .is_misaligned (is_misaligned)
+        .misaligned    (lsu_misaligned)
     );
 
     always_comb begin
@@ -100,8 +100,8 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 
             // well not all of these have to be gated with is_mmio, but doesn't matter for now...
             mmio_bus.addr   = addr;
-            mmio_bus.r_en   = is_mem_op && ex_mem.ctrl.mem_r;
-            mmio_bus.w_en   = is_mem_op && ex_mem.ctrl.mem_w;
+            mmio_bus.r_en   = safe && ex_mem.ctrl.mem_r;
+            mmio_bus.w_en   = safe && ex_mem.ctrl.mem_w;
             mmio_bus.w_data = lsu_w_data_fmt;
             mmio_bus.w_mask = lsu_w_mask;
 
@@ -115,8 +115,8 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
             // mem_stall   = is_mem_op && !mmio_bus.ready;
         end
         else begin
-            dcache_bus.req.r_en   = is_mem_op && ex_mem.ctrl.mem_r;
-            dcache_bus.req.w_en   = is_mem_op && ex_mem.ctrl.mem_w;
+            dcache_bus.req.r_en   = safe && ex_mem.ctrl.mem_r;
+            dcache_bus.req.w_en   = safe && ex_mem.ctrl.mem_w;
             dcache_bus.req.w_mask = 64'(lsu_w_mask) << (word_idx * 8);
             dcache_bus.req.w_data = 512'(lsu_w_data_fmt) << (word_idx * 64);
             
@@ -145,7 +145,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
     always_comb begin
         if (is_mmio) begin
             raw_r_data = mmio_bus.r_data;
-            mem_stall  = is_mem_op && !mmio_bus.ready;
+            mem_stall  = safe && is_mem_op && !mmio_bus.ready;
         end
         else begin
             // raw_r_data = dcache_bus.rsp.r_data[word_idx * 64 +: 64];
@@ -168,9 +168,10 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         trap_bus.take_mret = is_mret;
         trap_bus.take_sret = is_sret;
         trap_bus.take_irq  = is_irq && !(is_exc || is_mret);
-        trap_bus.cause     = is_exc ? mem_cause : 0;
+
         trap_bus.pc        = ex_mem.pc;
-        trap_bus.tval      = ex_mem.exc.tval;
+        trap_bus.cause     = cause;
+        trap_bus.tval      = tval;
 
         trap_flush  = !safe;
         csr_flush   = ex_mem.ctrl.is_csr && safe;
@@ -182,9 +183,11 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         out.rd           = ex_mem.rd;
         out.csr_new_data = ex_mem.rs2;
         out.csr_addr     = ex_mem.csr_w_addr;
+
         out.ctrl         = ex_mem.ctrl;
-        // out.ctrl.valid   = valid && safe;  bubble detection is unnecessary in wb...
+        out.ctrl.wb      = ex_mem.ctrl.wb     && safe;  // gating this signal early
         out.ctrl.is_csr  = ex_mem.ctrl.is_csr && safe;
+        out.ctrl.csr_we  = ex_mem.ctrl.csr_we && safe;
 
         wb       = ex_mem.ctrl.wb && safe;
         wb_rd    = ex_mem.rd;
@@ -200,7 +203,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
     // );
 
     always_ff @(posedge clk) begin
-        if (is_mem_op && ex_mem.ctrl.mem_w && !is_mmio) begin
+        if (safe && ex_mem.ctrl.mem_w && !is_mmio) begin
             if (lsu_w_mask[0]) dmem[dmem_idx][7:0]   <= lsu_w_data_fmt[7:0];
             if (lsu_w_mask[1]) dmem[dmem_idx][15:8]  <= lsu_w_data_fmt[15:8];
             if (lsu_w_mask[2]) dmem[dmem_idx][23:16] <= lsu_w_data_fmt[23:16];
@@ -234,7 +237,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 // logic        dbg_is_mmio         /* verilator public_flat */;
 // logic        dbg_mem_stall       /* verilator public_flat */;
 
-// logic        dbg_misaligned      /* verilator public_flat */;
+logic        dbg_misaligned      /* verilator public_flat */;
 
 // logic [63:0] dbg_raw_r_data      /* verilator public_flat */;
 // logic [63:0] dbg_r_data          /* verilator public_flat */;
@@ -279,7 +282,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
 // assign dbg_is_mmio  = is_mmio;
 // assign dbg_mem_stall = mem_stall;
 
-// assign dbg_misaligned = is_misaligned;
+assign dbg_misaligned = misaligned;
 
 // assign dbg_raw_r_data = raw_r_data;
 // assign dbg_r_data     = r_data;

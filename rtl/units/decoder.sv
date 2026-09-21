@@ -9,7 +9,8 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
     output logic [6:0]  f7,
 
     output ctrl_t       ctrl,
-    output exc_t        exc
+    output exc_t        exc,
+    output logic        ecall
 );
 
     logic [4:0]  op;
@@ -33,6 +34,8 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
 
         exc = '0;
         csr_w_op = 0;
+
+        ecall  = 0;
 
 
         case (op)
@@ -88,29 +91,26 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
             OP_IMMW: begin
                 has_rs1           = 1;
                 ctrl.alu_src2_imm = 1;
-                ctrl.is_wd_op     = (op == OP_IMMW);
                 ctrl.wb           = 1;
+                ctrl.is_wd_op     = (op == OP_IMMW);
             end
 
             OP_REG,
             OP_REGW: begin
                 has_rs1       = 1;
                 has_rs2       = 1;
-                ctrl.is_wd_op = (op == OP_REGW);
                 ctrl.wb       = 1;
+                ctrl.is_wd_op = (op == OP_REGW);
 
-                // Fix; word-sized muldiv wasn't there cuz op == OP_REGW wasn't either...
-                if (op == OP_REG || op == OP_REGW) begin
-                    ctrl.is_mul = (f7 == F7_1) && !f3[2];
-                    ctrl.is_div = (f7 == F7_1) &&  f3[2];
-                end
+                ctrl.is_mul   = (f7 == F7_1) && !f3[2];
+                ctrl.is_div   = (f7 == F7_1) &&  f3[2];
             end
 
             OP_SYS: begin
                 if (f3 != PRIV) begin
                     ctrl.is_csr  = 1;
                     ctrl.is_zimm = f3[2];
-                    has_rs1 = !f3[2];
+                    has_rs1      = !ctrl.is_zimm;
 
                     csr_w_op    = (f3[1:0] == CSR_RW);
                     ctrl.csr_we = (csr_w_op || (!csr_w_op && ins[19:15] != 0));
@@ -120,6 +120,8 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
 
                     case (sys_imm)
                         ECALL: begin
+                            ecall = 1;
+
                             unique case (priv)
                                 PRIV_U:  exc.cause = EXC_ECALL_U;
                                 PRIV_S:  exc.cause = EXC_ECALL_S;
@@ -128,14 +130,19 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
                         end
 
                         MRET : begin
-                            exc.valid   = (priv < PRIV_M);
-                            exc.is_mret = (priv == PRIV_M);
+                            if (priv == PRIV_M) begin
+                                exc.valid   = 0;
+                                exc.is_mret = 1;
+                            end else
+                                exc.cause = EXC_ILLEGAL_INSTR;
                         end
 
                         SRET : begin
-                            // M mode is allowed to exec sret, acc to specs...
-                            exc.valid   = (priv < PRIV_S);
-                            exc.is_sret = (priv >= PRIV_S);
+                            if (priv >= PRIV_S) begin
+                                exc.valid   = 0;
+                                exc.is_sret = 1;
+                            end else
+                                exc.cause = EXC_ILLEGAL_INSTR;
                         end
 
                         default: exc.cause = EXC_ILLEGAL_INSTR;

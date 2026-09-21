@@ -118,4 +118,19 @@ package zicsr_pkg;
         EXC_ECALL_M = 11,
         EXC_ECALL_S = 9,
         EXC_ECALL_U = 8;
+
+    
+    typedef struct packed {
+        logic        take_mepc;
+        logic [63:0] mepc;
+
+        logic        take_mtvec;
+        logic [63:0] mtvec;
+
+        logic        take_stvec;
+        logic [63:0] stvec;
+
+        logic        take_sepc;
+        logic [63:0] sepc;
+    } trap_t;
 endpackage

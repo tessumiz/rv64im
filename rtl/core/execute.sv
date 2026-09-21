@@ -1,4 +1,6 @@
 module execute import defs_pkg::*, zicsr_pkg::*; (
+    input logic   clk,
+
     input id_ex_t id_ex,
 
     input fwd_sig_t    fwd_sig,
@@ -46,8 +48,6 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
         .alu_out  (alu_out)
     );
 
-    assign br_targ = (alu_out & ~64'd1);
-
     bcu u_bcu (
         .rs1     (rs1_fwd),
         .rs2     (rs2_fwd),
@@ -56,6 +56,8 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
         .f3      (id_ex.f3),
         .take_br (take_br)  // For garbage ins, is_br/jmp will be 0
     );
+
+    assign br_targ = alu_out;
 
 
     logic [63:0] csr_w_data;
@@ -117,7 +119,7 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
 
 // logic [63:0] dbg_alu_in1       /* verilator public_flat */;
 // logic [63:0] dbg_alu_in2       /* verilator public_flat */;
-// logic [63:0] dbg_alu_out       /* verilator public_flat */;
+// logic [63:0] dbg_br_targ       /* verilator public_flat */;
 
 // logic        dbg_take_br       /* verilator public_flat */;
 // logic [63:0] dbg_br_targ       /* verilator public_flat */;
@@ -145,7 +147,7 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
 
 // assign dbg_alu_in1 = alu_in1;
 // assign dbg_alu_in2 = alu_in2;
-// assign dbg_alu_out = alu_out;
+// assign dbg_br_targ = br_targ;
 
 // assign dbg_take_br = take_br;
 // assign dbg_br_targ = br_targ;

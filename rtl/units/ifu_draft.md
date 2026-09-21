@@ -4,6 +4,7 @@
 
 * TLB miss  => stall cache
 * PTW fault => abort cache
+* ma_instr  => abort cache
 
 >> if TLB is busy (on-going flush, pending D writes), stall
 
