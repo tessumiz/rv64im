@@ -49,23 +49,23 @@ package mem_pkg;
     } itlb_data_t;
 
 
-    // ICACHE
-    localparam
-        ICACHE_LINE_SIZE  = 64 * 8,  // Don't change this; else a refactor would be required across files
-        ICACHE_WAYS       = 8,
-        ICACHE_BLK_OFF_W  = 12,
+    // VIPT CACHES
+    localparam CACHE_LINE_SIZE  = 64 * 8;  // Don't change this; else a refactor would be required across files
+    typedef logic [CACHE_LINE_SIZE-1:0] cache_data_t;
 
-        ICACHE_OFFSET_W   = $clog2(ICACHE_LINE_SIZE / 8),
-        ICACHE_SETS       = 2 ** (ICACHE_BLK_OFF_W - ICACHE_OFFSET_W);
+
+    // ICACHE (16KB)
+    localparam
+        ICACHE_WAYS = 4,
+        ICACHE_BLK_OFF_W = 12,
+
+        ICACHE_OFFSET_W = 6,
+        ICACHE_SETS = 2 ** (ICACHE_BLK_OFF_W - ICACHE_OFFSET_W);
 
 
     typedef struct packed {
         logic [43:0] ppn;
     } icache_tag_t;
-    
-    typedef struct packed {
-        logic [ICACHE_LINE_SIZE-1 : 0] data;
-    } icache_data_t;
 
     
     // DTLB
@@ -94,24 +94,19 @@ package mem_pkg;
     } dtlb_data_t;
 
 
-    // DCACHE (NOTE: I'm not unifying I/D data structs; future proofing for some obscure reason)
+    // DCACHE (32KB)
     // I've deliberately used an invariant/variant split here
     localparam
-        DCACHE_LINE_SIZE = 64 * 8,  // Don't change this
         DCACHE_BLK_OFF_W = 12,
-        DCACHE_WAYS  = 8,
+        DCACHE_WAYS = 8,
 
-        DCACHE_OFFSET_W   = $clog2(DCACHE_LINE_SIZE / 8),
-        DCACHE_SETS       = 2 ** (DCACHE_BLK_OFF_W - DCACHE_OFFSET_W);
+        DCACHE_OFFSET_W = 6,
+        DCACHE_SETS = 2 ** (DCACHE_BLK_OFF_W - DCACHE_OFFSET_W);
 
 
     typedef struct packed {
         logic [43:0] ppn;
     } dcache_tag_t;
-    
-    typedef struct packed {
-        logic [DCACHE_LINE_SIZE-1 : 0] data;
-    } dcache_data_t;
 
 
 
@@ -128,14 +123,14 @@ package mem_pkg;
         logic abort;
 
         logic [RAM_ADDR_W-1:0] addr;
-        logic [63:0] w_data;  // miu supports a write buffer (N = 1)
+        logic [63:0] w_data;
     } miu_req_t;
 
     typedef struct packed {
         logic busy;
         logic ready;
 
-        // imprecise exc (write buffer wb faults) will be dealt using a separate out pin from the miu
+        // imprecise exc will be dealt using a separate out pin from the miu
         logic access_fault;
 
         // burst_mask is common for both reads and writes
@@ -190,7 +185,7 @@ package mem_pkg;
     typedef enum logic [3:0] {
         CACHE_CLR, CACHE_IDLE, CACHE_INIT_READ, CACHE_TAG_CMP, CACHE_EVICT,
         CACHE_FLUSH_DIRTY_SET, CACHE_FLUSH, CACHE_NORM_WRITE, CACHE_REQ_FILL,
-        CACHE_R_FILL, CACHE_SUBWORD_W_FILL, CACHE_READ_AFTER_R_FILL
+        CACHE_R_FILL, CACHE_W_FILL, CACHE_READ_AFTER_R_FILL
     } set_cache_fsm_t;
 
     typedef enum logic [2:0] {

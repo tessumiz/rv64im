@@ -44,28 +44,27 @@ endinterface
 
 interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
     parameter type  TAG_T,
-    parameter type  DATA_T,
     parameter uint  SETS,
     parameter uint  WAYS
 );
 
     localparam uint SET_IDX_W  = uint'($clog2(SETS));
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
-    localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
 
     typedef struct packed {
         logic [SET_IDX_W-1:0] set_idx;
+        logic [2:0]       blk_offset;  // which 8B within the cache-line
         TAG_T             tag;
         logic             r_en;
         logic             w_en;
-        DATA_T            w_data;
-        logic [W_MASK_LEN-1:0] w_mask;
+        logic [63:0]      w_data;
+        logic [7:0]       w_mask;
 
         // add is_sub_write instead of OR-ing from w_mask
     } req_t;
 
     typedef struct packed {
-        DATA_T r_data;
+        logic [63:0] r_data;
         logic  hit;
         logic  busy;
         logic  ready;

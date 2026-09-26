@@ -7,7 +7,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     set_cache_if.cache bus
 );
 
-    localparam type DATA_T = type(bus.req.w_data);
+    localparam type DATA_T = cache_data_t;
     localparam type TAG_T  = type(bus.req.tag);
     localparam uint SETS   = bus.SETS;
     localparam uint WAYS   = bus.WAYS;
@@ -47,12 +47,10 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     // latching req sigs
     logic  req_r_en, req_w_en;
     TAG_T  req_tag;
-    DATA_T req_w_data;
-    logic  [bus.W_MASK_LEN-1:0] req_w_mask;
-    logic  [$clog2(SETS)-1:0]   req_set_idx;
-
-    logic  is_subword_w;
-    assign is_subword_w = !(&req_w_mask);  // add is_sub_write to intf instead of wasting gates
+    logic  [63:0] req_w_data;
+    logic  [7:0]  req_w_mask;
+    logic  [$clog2(SETS)-1:0] req_set_idx;
+    logic  [2:0] req_blk_offset;
 
 
     // sigs for writes to cache
@@ -62,7 +60,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
     DATA_T    w_data;
     way_idx_t w_way;
-    logic [bus.W_MASK_LEN-1:0] w_wmask;
+    logic [63:0] w_wmask;
 
     DATA_T    r_filled_data;
 
@@ -197,6 +195,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                 CACHE_INIT_READ : begin
                     state   <= CACHE_TAG_CMP;
                     req_tag <= bus.req.tag;
+                    req_blk_offset <= bus.req.blk_offset;
                 end
 
                 CACHE_TAG_CMP : begin
@@ -208,31 +207,27 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                         meta[req_set_idx][victim_way].valid <= 0;
                     end
 
-                    else if (req_r_en)
-                        state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
+                    else begin
+                        if (req_w_en && hit)
+                            meta[req_set_idx][hit_way].dirty <= 1;
 
-                    else
-                        state <= (is_subword_w && miss) ? CACHE_REQ_FILL : CACHE_NORM_WRITE;
+                        state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
+                    end
                 end
 
                 CACHE_EVICT : begin
                     // handle RAM errors later; for now, assume evict always succeeds
-                    if (bus.miu_rsp.burst_done) begin
-                        if (req_r_en)
-                            state <= hit ? CACHE_IDLE : CACHE_REQ_FILL;
-
-                        else
-                            state <= is_subword_w ? CACHE_REQ_FILL : CACHE_NORM_WRITE;  // assumption; evicts only happen during a miss
-                    end
+                    if (bus.miu_rsp.burst_done)
+                        state <= CACHE_REQ_FILL;
                 end
 
                 CACHE_REQ_FILL : begin
                     if (bus.miu_rsp.ready)
-                        state <= req_r_en ? CACHE_R_FILL : CACHE_SUBWORD_W_FILL;
+                        state <= req_r_en ? CACHE_R_FILL : CACHE_W_FILL;
                 end
 
                 // burst fsm will be handled by miu
-                CACHE_SUBWORD_W_FILL : begin
+                CACHE_W_FILL : begin
                     if (bus.miu_rsp.burst_done) begin
                         state <= CACHE_NORM_WRITE;
 
@@ -250,8 +245,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                         state <= CACHE_READ_AFTER_R_FILL;
                         curr_data <= data_mem[req_set_idx];
 
-                        /* same remark */
-                        // meta[req_set_idx][victim_way] <= '{ valid: 1, dirty: 0 };
+                        meta[req_set_idx][victim_way] <= '{ valid: 1, dirty: 0 };
                     end
                 end
 
@@ -330,6 +324,11 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     logic  victim_present;
     assign victim_present = victim_meta.valid && victim_meta.dirty;
 
+    logic [511:0] w_sel_data;
+
+    logic [7:0] burst_mask;
+    assign      burst_mask = bus.miu_rsp.burst_mask;
+
 
     always_comb begin
         victim_tag  = curr_tag[victim_way];
@@ -342,7 +341,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         // Fix; deferred subword fill r_en till evict wb completes...
         // abort gating is unnecessary; miu handles that
         bus.miu_req.r_en = (
-            (state == CACHE_TAG_CMP && miss && (req_r_en || (req_w_en && is_subword_w && !victim_present))) ||
+            (state == CACHE_TAG_CMP && miss && !victim_present) ||
             (state == CACHE_REQ_FILL)
         );
 
@@ -354,12 +353,16 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         bus.miu_req.addr =
             (state == CACHE_FLUSH_DIRTY_SET) ?
-              {flush_tag.ppn,  curr_clr_addr - 1}
-            : {victim_tag.ppn, req_set_idx};
+              { flush_tag.ppn,  curr_clr_addr - 1, 6'b0 }
+            : { victim_tag.ppn, req_set_idx, 6'b0 };
 
-        bus.miu_req.w_data =
-            (state == CACHE_FLUSH_DIRTY_SET)
-                ? flush_data : victim_data;
+        w_sel_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_data : victim_data;
+
+        bus.miu_req.w_data = '0;
+
+        for (int i = 0; i < 8; i++)
+            bus.miu_req.w_data |= w_sel_data[i*64 +: 64] & {64{burst_mask[i]}};
+
 
         /*
         miu fsm handles this; let the cache immediately go to IDLE
@@ -373,31 +376,36 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     always_comb begin
         // change these into moore machines later; degrading asic quality for reducing latency of
         // an already latent operation is terrible ROI
-        norm_w = req_w_en && (
-            (state == CACHE_TAG_CMP && (hit || (miss && !(is_subword_w || victim_present)))) ||
-            (state == CACHE_EVICT && bus.miu_rsp.burst_done && !is_subword_w) ||
-            (state == CACHE_SUBWORD_W_FILL && bus.miu_rsp.burst_done)
-        );
+        norm_w =
+            (state == CACHE_TAG_CMP && req_w_en && hit) ||
+            (state == CACHE_NORM_WRITE);
 
         burst_w =
             (state == CACHE_REQ_FILL && bus.miu_rsp.ready) ||
-            ((state == CACHE_R_FILL || state == CACHE_SUBWORD_W_FILL) && !bus.miu_rsp.burst_done);
+            (state == CACHE_R_FILL || state == CACHE_W_FILL);
 
 
         write  = !abort && (norm_w || burst_w);
         w_way  = (req_w_en && hit) ? hit_way : victim_way;
 
 
-        // hit write/subword-write (note that bus.w_en is already gated to logic 'write'...)
         if (norm_w) begin
-            w_data  = req_w_data;
-            w_wmask = req_w_mask;
+            w_data  = 512'(req_w_data) << (req_blk_offset * 64);
+            w_wmask = 64'(req_w_mask)  << (req_blk_offset * 8);
         end
-
-        // miss fill; burst
         else begin
-            w_data  = bus.miu_rsp.r_data;
-            w_wmask = bus.miu_rsp.burst_mask;
+            w_data  = {8{bus.miu_rsp.r_data}};
+
+            w_wmask = {
+                {8{burst_mask[7]}}, 
+                {8{burst_mask[6]}}, 
+                {8{burst_mask[5]}}, 
+                {8{burst_mask[4]}}, 
+                {8{burst_mask[3]}}, 
+                {8{burst_mask[2]}}, 
+                {8{burst_mask[1]}}, 
+                {8{burst_mask[0]}}
+            };
         end
 
     end
@@ -411,14 +419,16 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;  // readys leads CACHE_IDLE, hence why gated here
 
         r_filled_data  = curr_data[victim_way];
-        bus.rsp.r_data = hit ? hit_data : r_filled_data;
+
+        bus.rsp.r_data = hit ? hit_data[req_blk_offset * 64 +: 64] 
+                             : r_filled_data[req_blk_offset * 64 +: 64];
     end
 
     always_ff @(posedge clk) begin
         if (!rst && write) begin
             tag_mem [req_set_idx][w_way] <= req_tag;
 
-            for (uint i = 0; i < bus.W_MASK_LEN; i++) begin
+            for (uint i = 0; i < 64; i++) begin
                 if (w_wmask[i])
                     data_mem[req_set_idx][w_way][8*i +: 8] <= w_data[8*i +: 8];
             end

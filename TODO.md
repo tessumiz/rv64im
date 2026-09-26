@@ -1,4 +1,6 @@
 ## 1
+- [ ] abort whilst evicting
+
 - [ ] gate all ready/busy sigs with faults
 
 
