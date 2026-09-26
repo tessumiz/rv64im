@@ -115,9 +115,41 @@ package mem_pkg;
 
 
 
+    // MIU
+    localparam
+        RAM_SIZE   = 4 * 1024 * 1024,
+        RAM_ADDR_W = $clog2(RAM_SIZE);
+
+
+    // only supports 64B txn; all reads and writes are bursts
+    typedef struct packed {
+        logic r_en;
+        logic w_en;
+        logic abort;
+
+        logic [RAM_ADDR_W-1:0] addr;
+        logic [63:0] w_data;  // miu supports a write buffer (N = 1)
+    } miu_req_t;
+
+    typedef struct packed {
+        logic busy;
+        logic ready;
+
+        // imprecise exc (write buffer wb faults) will be dealt using a separate out pin from the miu
+        logic access_fault;
+
+        // burst_mask is common for both reads and writes
+        // Fix; changed from [2:0] to avoid decoding binary to a flat w_mask
+        logic [7:0]  burst_mask;
+        logic burst_done;
+
+        logic [63:0] r_data;
+    } miu_rsp_t;
+
+
     // PTW
     typedef struct packed {
-        logic [9:0]  reserved;
+        logic [9:0]  rsrv;
         logic [7:0]  ppn4;
         logic [8:0]  ppn3;
         logic [8:0]  ppn2;
@@ -156,8 +188,9 @@ package mem_pkg;
 
     // FSMs
     typedef enum logic [3:0] {
-        CACHE_CLR, CACHE_IDLE, CACHE_READ, CACHE_TAG_CMP, CACHE_EVICT, CACHE_FLUSH_DIRTY_SET,
-        CACHE_WRITE, CACHE_REQ_FILL, CACHE_R_FILL, CACHE_SUBWORD_W_FILL
+        CACHE_CLR, CACHE_IDLE, CACHE_INIT_READ, CACHE_TAG_CMP, CACHE_EVICT,
+        CACHE_FLUSH_DIRTY_SET, CACHE_FLUSH, CACHE_NORM_WRITE, CACHE_REQ_FILL,
+        CACHE_R_FILL, CACHE_SUBWORD_W_FILL, CACHE_READ_AFTER_R_FILL
     } set_cache_fsm_t;
 
     typedef enum logic [2:0] {

@@ -49,12 +49,12 @@ interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
     parameter uint  WAYS
 );
 
-    localparam uint IDX_W      = uint'($clog2(SETS));
+    localparam uint SET_IDX_W  = uint'($clog2(SETS));
     localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
     localparam uint W_MASK_LEN = $bits(DATA_T) / 8;
 
     typedef struct packed {
-        logic [IDX_W-1:0] set_idx;
+        logic [SET_IDX_W-1:0] set_idx;
         TAG_T             tag;
         logic             r_en;
         logic             w_en;
@@ -71,32 +71,21 @@ interface set_cache_if import defs_pkg::uint, mem_pkg::*; #(
         logic  ready;
     } rsp_t;
 
-    typedef struct packed {
-        logic  evict_wb;
-        TAG_T  evict_tag;
-        DATA_T evicted_data;
-        logic  fill_req;
-    } mem_req_t;
-
-    typedef struct packed {
-        logic  fill_en;
-        DATA_T fill_data; // at req_master's set_idx
-        logic  evict_complete;
-    } mem_rsp_t;
 
     req_t     req;
     rsp_t     rsp;
-    mem_req_t mem_req;
-    mem_rsp_t mem_rsp;
+
+    miu_req_t miu_req;
+    miu_rsp_t miu_rsp;
 
     modport master (
-        output req, mem_rsp,
-        input  rsp, mem_req
+        output req, miu_rsp,
+        input  rsp, miu_req
     );
 
     modport cache (
-        input  req, mem_rsp,
-        output rsp, mem_req
+        input  req, miu_rsp,
+        output rsp, miu_req
     );
 endinterface
 
@@ -107,12 +96,12 @@ interface tlb_if import defs_pkg::uint, mem_pkg::*; #(
     parameter uint  SETS,
     parameter uint  WAYS
 );
-    localparam uint IDX_W      = uint'($clog2(SETS));
-    localparam uint WAY_LOG_W  = uint'($clog2(WAYS));
+    localparam uint SET_IDX_W = uint'($clog2(SETS));
+    localparam uint WAY_LOG_W = uint'($clog2(WAYS));
 
     typedef struct packed {
         logic             valid;
-        logic [IDX_W-1:0] set_idx;
+        logic [SET_IDX_W-1:0] set_idx;
         TAG_T             tag;
         logic             u, r, w, x;
         mmu_ctx_t         mmu_ctx;

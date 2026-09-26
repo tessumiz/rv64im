@@ -68,14 +68,12 @@ module tree_plru import defs_pkg::uint, mem_pkg::*; #(
         accessed_way = ctrl.hit ? hit_way : victim_way;
         nxt_plru = curr_plru;
 
-        if (ctrl.hit || ctrl.fill_req) begin
-            for (uint i = 0; i < WAY_LOG_W; i++) begin
-                way_idx  = (WAY_LOG_W - 1) - i;
-                plru_idx = (2 ** i) - 1;
-                offset   = (accessed_way >> (way_idx + 1));
+        for (uint i = 0; i < WAY_LOG_W; i++) begin
+            way_idx  = (WAY_LOG_W - 1) - i;
+            plru_idx = (2 ** i) - 1;
+            offset   = (accessed_way >> (way_idx + 1));
 
-                nxt_plru[plru_idx + offset] = ~accessed_way[way_idx];
-            end
+            nxt_plru[plru_idx + offset] = ~accessed_way[way_idx];
         end
     end
 
