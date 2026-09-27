@@ -4,7 +4,7 @@ module tb_cache_top import mem_pkg::*; (
     input  logic clk,
     input  logic rst,
     input  logic flush,
-    input  logic abort,
+    input  logic abort_sig,
 
     // pipe req
     input  logic [5:0]  cpu_set_idx,
@@ -82,7 +82,7 @@ module tb_cache_top import mem_pkg::*; (
         .clk   (clk),
         .rst   (rst),
         .flush (flush),
-        .abort (abort),
+        .abort_sig (abort_sig),
         .bus   (bus.cache)
     );
 

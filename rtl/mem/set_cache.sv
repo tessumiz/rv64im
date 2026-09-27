@@ -2,7 +2,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     input  logic clk,
     input  logic rst,
     input  logic flush,  // triggers dirty wb fsm
-    input  logic abort,
+    input  logic abort_sig,
 
     set_cache_if.cache bus
 );
@@ -200,7 +200,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
                 CACHE_TAG_CMP : begin
                     if (bus.miu_req.w_en) begin
-                        assert property (miss) else 
+                        assert (miss) else 
                                 $error("Eviction taken during hit; subword fill unrequired for hits");
 
                         state <= CACHE_EVICT;
@@ -233,7 +233,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
                         /*
                         poor ROI; trying to squeeze perf out of a special case where
-                        an abort precisely occurs after a burst fill is done, trying
+                        an abort_sig precisely occurs after a burst fill is done, trying
                         to mark the fetched data as valid instead of discarding it
                         */
                         // meta[req_set_idx][victim_way] <= '{ valid: 1, dirty: 0 };
@@ -261,7 +261,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                 default: ;
             endcase
 
-            if (abort) state <= CACHE_IDLE;
+            if (abort_sig) state <= CACHE_IDLE;
         end
     end
 
@@ -339,7 +339,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         flush_data  = curr_data[curr_flush_way];
 
         // Fix; deferred subword fill r_en till evict wb completes...
-        // abort gating is unnecessary; miu handles that
+        // abort_sig gating is unnecessary; miu handles that
         bus.miu_req.r_en = (
             (state == CACHE_TAG_CMP && miss && !victim_present) ||
             (state == CACHE_REQ_FILL)
@@ -367,10 +367,10 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         /*
         miu fsm handles this; let the cache immediately go to IDLE
         evicts precede fills, and the fill valid bit is set only at the last burst cycle,
-        hence correctness issues are absent. If abort arrives amidst an eviction, let the
+        hence correctness issues are absent. If abort_sig arrives amidst an eviction, let the
         miu handle it appropriately; either errors out (currently), or some other behaviour
         */
-        bus.miu_req.abort = abort;
+        bus.miu_req.abort = abort_sig;
     end
 
     always_comb begin
@@ -385,7 +385,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
             (state == CACHE_R_FILL || state == CACHE_W_FILL);
 
 
-        write  = !abort && (norm_w || burst_w);
+        write  = !abort_sig && (norm_w || burst_w);
         w_way  = (req_w_en && hit) ? hit_way : victim_way;
 
 

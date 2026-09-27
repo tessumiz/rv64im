@@ -9,7 +9,7 @@
 #define WAY_LOG 3
 
 
-struct req_t {
+struct sim_req_t {
     bool r_en;
     bool w_en;
 
@@ -21,7 +21,7 @@ struct req_t {
     u8   w_mask;
 };
 
-struct rsp_t {
+struct sim_rsp_t {
     bool hit;
     u64  r_data;
     bool evict;
@@ -45,6 +45,8 @@ class Cache {
 
     // it's pointless to connect this with the miu after all...
     u64* ram;
+    u64  buff_w[8];
+    u64  buff_w_addr;
 
 
     u8 get_victim(u8 set) {
@@ -98,20 +100,32 @@ public:
 
     Line read_mem(u64 addr) {
         Line line;
+        u32 base = (addr & 0x3FFFFF) / 8;
 
         for (int i = 0; i < 8; i++)
-            line.w[i] = ram[addr/8 + i];
+            line.w[i] = ram[base + i];
 
         return line;
     }
 
     void write_mem(u64 addr, Line d) {
+        buff_w_addr = addr;
+
         for (int i = 0; i < 8; i++)
-            ram[addr/8 + i] = d.w[i];
+            buff_w[i] = d.w[i];
     }
 
-    rsp_t eval(req_t req) {
-        rsp_t rsp = {};
+    u64* commit_write() {
+        u32 base = (buff_w_addr & 0x3FFFFF) / 8;
+
+        for (int i = 0; i < 8; i++)
+            ram[base + i] = buff_w[i];
+
+        return buff_w;
+    }
+
+    sim_rsp_t eval(sim_req_t req) {
+        sim_rsp_t rsp = {};
         int hit_w = -1;
 
         for (int w = 0; w < WAYS; w++) {
@@ -144,9 +158,10 @@ public:
         if (req.r_en)
             rsp.r_data = data[req.set][tgt].w[req.off];
 
-        else if (req.w_en)
+        else if (req.w_en) {
             apply_mask(data[req.set][tgt].w[req.off], req.w_data, req.w_mask);
             meta[req.set][tgt].d = true;
+        }
 
         if (req.r_en || req.w_en)
             update_plru(req.set, tgt);

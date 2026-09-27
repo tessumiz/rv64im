@@ -22,19 +22,19 @@ struct miu_rsp_t {
 
 
 class MIU {
-    static const int RAM_SIZE = 256 KB; 
     u64* ram;
 
     miu_req_t req_l = {};
     int  delay = -1;
     int  beat = 0;
 
+    u64 w_buff[8];
+
     enum { Idle, RamAccess, Reading, Writing, Draining } fsm = Idle;
 
 
 public:
-    MIU()  { ram = new u64[RAM_SIZE / 8]; }
-    ~MIU() { delete[] ram; }
+    MIU(u64* ram) : ram(ram) { }
 
     miu_rsp_t eval(miu_req_t req) {
         miu_rsp_t rsp = {};
@@ -91,7 +91,7 @@ public:
             case Writing:
                 rsp.busy = true;
                 rsp.burst_mask = 1 << beat;
-                ram[req_l.addr/8 + beat] = req.w_data;
+                w_buff[beat] = req.w_data;
                 
                 if (++beat == 8) {
                     rsp.burst_done = true;
@@ -111,5 +111,14 @@ public:
         }
 
         return rsp;
+    }
+
+    u64* commit_write() {
+        for (int i = 0; i < 8; i++) {
+            ram[req_l.addr/8 + i] = w_buff[i];
+            w_buff[i] = -1;  // just an empty sentinel; pretty sure this value will never appear during testing...
+        }
+
+        return w_buff;
     }
 };
