@@ -2,15 +2,15 @@
 #include <cstdlib>
 
 
-typedef struct {
+struct miu_req_t {
     bool r_en = false;
     bool w_en = false;
     bool abort = false;
     u32  addr;
     u64  w_data;
-} miu_req_t;
+};
 
-typedef struct {
+struct miu_rsp_t {
     bool busy = false;
     bool ready = false;
     bool access_fault = false;
@@ -18,7 +18,7 @@ typedef struct {
     
     u8   burst_mask;
     u64  r_data;
-} miu_rsp_t;
+};
 
 
 class MIU {
@@ -30,6 +30,7 @@ class MIU {
     int  beat = 0;
 
     enum { Idle, RamAccess, Reading, Writing, Draining } fsm = Idle;
+
 
 public:
     MIU()  { ram = new u64[RAM_SIZE / 8]; }

@@ -16,6 +16,7 @@ struct req_t {
     u64  tag;
     u8   set;
     u8   off;
+
     u64  w_data;
     u8   w_mask;
 };
