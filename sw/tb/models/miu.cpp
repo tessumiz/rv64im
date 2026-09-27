@@ -3,78 +3,110 @@
 
 
 typedef struct {
-    bool r_en;
-    bool w_en;
-    bool abort;
-
-    u32 addr;
-    u64 w_data;
+    bool r_en = false;
+    bool w_en = false;
+    bool abort = false;
+    u32  addr;
+    u64  w_data;
 } miu_req_t;
 
-typedef struct packed {
-    bool busy;
-    bool ready;
-    bool access_fault;
-
+typedef struct {
+    bool busy = false;
+    bool ready = false;
+    bool access_fault = false;
+    bool burst_done = false;
+    
     u8   burst_mask;
-    bool burst_done;
-
-    u64 r_data;
+    u64  r_data;
 } miu_rsp_t;
 
 
-// arbitration deferred for now
 class MIU {
-    const int RAM_SIZE   = 256 KB;
-    u64* ram = new u64[RAM_SIZE / 8];
+    static const int RAM_SIZE = 256 KB; 
+    u64* ram;
 
-    miu_req_t req;  // latched
+    miu_req_t req_l = {};
+    int  delay = -1;
+    int  beat = 0;
 
-    int  ram_rsp_ticks = -1;  // arbitrary latency sim
-
-    bool bursting;
-    int  beat;
-    bool abort_pending;
-
+    enum { Idle, RamAccess, Reading, Writing, Draining } fsm = Idle;
 
 public:
-    miu_rsp_t eval(miu_req_t request) {
-        miu_rsp_t rsp;
+    MIU()  { ram = new u64[RAM_SIZE / 8]; }
+    ~MIU() { delete[] ram; }
 
-        if (request.abort)
-            abort_pending = true;
+    miu_rsp_t eval(miu_req_t req) {
+        miu_rsp_t rsp = {};
 
-        if (!bursting && (req.r_en || req.w_en)) {
-            req = request;
-            rsp.busy = 1;
+        if (req.abort) {
+            if (fsm == RamAccess)
+                fsm = Idle;
 
-            if (ram_rsp_ticks == 0)
-                ram_rsp_ticks = rand() % 10 + 1;
-            
-            else if (--ram_rsp_ticks == 0) {
-                rsp.ready = true;
-
-                if (!abort_pending)
-                    bursting = true;
-            }
+            else if (fsm == Reading || fsm == Writing)
+                fsm = Draining;
         }
-        else if (bursting) {
-            rsp.ready = false;  // just a pulse
 
-            int base = req.addr / 8;
-            int ram_addr = base + beat;
+        switch (fsm) {
+            case Idle:
+                if (!req.abort && (req.r_en || req.w_en)) {
+                    req_l = req;
+                    delay = (rand() % 10) + 1;
+                    fsm = RamAccess;
+                    rsp.busy = true;
+                }
+                break;
 
-            if (req.r_en) {
-                rsp.r_data = ram[ram_addr];
+            case RamAccess:
+                rsp.busy = true;
+
+                if (--delay == 0) {
+                    rsp.ready = true;
+                    fsm = req_l.r_en ? Reading : Writing;
+                    beat = 0;
+
+                    rsp.burst_mask = 0;
+                    u32 ram_addr = req_l.addr/8 + beat;
+                    
+                    if (fsm == Reading)
+                        rsp.r_data = ram[ram_addr];
+                    else
+                        ram[ram_addr] = req.w_data;
+
+                    beat++;
+                }
+                break;
+
+            case Reading:
+                rsp.busy = true;
                 rsp.burst_mask = 1 << beat;
-            } else
-                ram[ram_addr] = request.w_data;  // latched w_data isn't what gets used here!
-            
-            if (++beat == 8) {
-                rsp.burst_done = true;
-                rsp.busy = false;
-                beat = 0;
-            }
+                rsp.r_data = ram[req_l.addr/8 + beat];
+                
+                if (++beat == 8) {
+                    rsp.burst_done = true;
+                    fsm = Idle;
+                }
+                break;
+
+            case Writing:
+                rsp.busy = true;
+                rsp.burst_mask = 1 << beat;
+                ram[req_l.addr/8 + beat] = req.w_data;
+                
+                if (++beat == 8) {
+                    rsp.burst_done = true;
+                    fsm = Idle;
+                }
+                break;
+
+            case Draining:
+                rsp.busy = true;
+                rsp.burst_mask = 1 << beat;
+
+                if (++beat == 8) {
+                    rsp.burst_done = true;
+                    fsm = Idle;
+                }
+                break;
         }
 
         return rsp;
