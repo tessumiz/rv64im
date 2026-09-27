@@ -94,7 +94,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
     always_comb begin
         clr_done    = (curr_clr_addr  == SETS);
-        set_flushed = (curr_flush_way == WAYS - 1);
+        set_flushed = (curr_flush_way == WAYS - 1'b1);
 
         begin_flush_wb = 0;
         for (uint i = 0; i < WAYS; i++)
@@ -353,7 +353,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         bus.miu_req.addr =
             (state == CACHE_FLUSH_DIRTY_SET) ?
-              { flush_tag.ppn,  curr_clr_addr - 1, 6'b0 }
+              { flush_tag.ppn,  curr_clr_addr - 1'b1, 6'b0 }
             : { victim_tag.ppn, req_set_idx, 6'b0 };
 
         w_sel_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_data : victim_data;
