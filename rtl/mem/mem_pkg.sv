@@ -145,9 +145,7 @@ package mem_pkg;
     // PTW
     typedef struct packed {
         logic [9:0]  rsrv;
-        logic [7:0]  ppn4;
-        logic [8:0]  ppn3;
-        logic [8:0]  ppn2;
+        logic [25:0] ppn2;
         logic [8:0]  ppn1;
         logic [8:0]  ppn0;
         logic [1:0]  rsw;
@@ -162,23 +160,8 @@ package mem_pkg;
     } pte_t;
 
     typedef struct packed {
-        logic [8:0] vpn4, vpn3, vpn2, vpn1, vpn0;
+        logic [8:0] vpn2, vpn1, vpn0;
     } vpn_t;
-
-
-    // PWC
-    typedef struct packed {
-        logic [8:0]  vpn4, vpn3, vpn2;
-        logic        g;
-        logic [15:0] asid;
-        logic [1:0]  mode;  // satp_mode[1:0] (since codes are 8-10 for sv39-57)
-    } pwc_tag_t;
-
-    typedef struct packed {
-        logic        valid;
-        pwc_tag_t    tag;
-        logic [43:0] lvl1_root;
-    } pwc_data_t;
 
 
     // FSMs
@@ -188,21 +171,19 @@ package mem_pkg;
         CACHE_R_FILL, CACHE_W_FILL, CACHE_READ_AFTER_R_FILL
     } set_cache_fsm_t;
 
+
     typedef enum logic [2:0] {
         TLB_IDLE, TLB_READ_AND_TAG_CMP, TLB_FAULT_CHECK, TLB_FETCH_PAGE,
         TLB_WRITE_PAGE, TLB_EVICT_PAGE
     } set_tlb_fsm_t;
 
+
     typedef enum logic [2:0] {
-        PTW_IDLE, PTW_CHECK_PWC, PTW_READ, PTW_CHECK_PTE, PTW_WRITE
+        PTW_IDLE, PTW_READ, PTW_CHECK_PTE, PTW_WRITE
     } ptw_fsm_t;
 
-    typedef enum logic [2:0] {
-        PTW_LVL4, PTW_LVL3, PTW_LVL2, PTW_LVL1, PTW_LVL0
+    typedef enum logic [1:0] {
+        PTW_LVL2, PTW_LVL1, PTW_LVL0
     } ptw_lvl_t;
-
-    typedef enum logic [2:0] {
-        MEGA_PAGE = 3'b000, GIGA_PAGE = 3'b001, TERA_PAGE = 3'b011, PETA_PAGE = 3'b111
-    } superpage_mask_t;
 
 endpackage

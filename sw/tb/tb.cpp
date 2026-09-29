@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstdlib>
+#include <system_error>
 
 #include "include/types.hpp"
 #include "models/cache.hpp" 
@@ -42,7 +43,9 @@ int main(int argc, char** argv) {
     bool  req_pending = false;
     sim_req_t req = {};
 
-    for (int cycle = 0; cycle < 10 * 1000 * 1000; cycle++) {
+    const int LIMIT = 10 * 1000 * 1000;
+    // allow any pending final txn to complete...
+    for (int cycle = 0; (cycle < LIMIT || req_pending); cycle++) {
         if (!(req_pending || top->cpu_busy)) {
             req.r_en = rand() % 2;
             req.w_en = !req.r_en;
@@ -116,16 +119,17 @@ int main(int argc, char** argv) {
                 return 1;
             }
 
-            // else if (sim_rsp.evict) {
-            //     u64* rtl_w_buff = miu.commit_write();
-            //     u64* sim_w_buff = cache_sim.commit_write();
+            else if (sim_rsp.evict != miu.w_pending)
+                std::cerr << "w-pending mismatch, cycle: " << cycle << std::endl;
 
-            //     for (int i = 0; i < 0; i++) {
-            //         if (rtl_w_buff[i] != sim_w_buff[i]) {
-            //             std::cerr << "w_data, cycle: "<< cycle << std::endl;  // add diafnostics later
-            //         }
-            //     }
-            // }
+            else if (sim_rsp.evict) {
+                u64* rtl_w_buff = miu.commit_write();
+                u64* sim_w_buff = cache_sim.commit_write();
+
+                for (int i = 0; i < 8; i++)
+                    if (rtl_w_buff[i] != sim_w_buff[i])
+                        std::cerr << "w_data, cycle: "<< cycle << std::endl;  // add diafnostics later
+            }
 
             req_pending = false;
         }

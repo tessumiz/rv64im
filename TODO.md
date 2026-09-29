@@ -3,6 +3,8 @@
 
 - [ ] gate all ready/busy sigs with faults
 
+- [ ] since ptw has been changed, modify tlb defs in mem_pkg and mem_if too
+
 
 
 ## 2

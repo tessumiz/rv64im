@@ -28,12 +28,14 @@ class MIU {
     int  delay = -1;
     int  beat = 0;
 
-    u64 w_buff[8];
+    u64  w_buff[8];
 
     enum { Idle, RamAccess, Reading, Writing, Draining } fsm = Idle;
 
 
 public:
+    bool w_pending = false;
+
     MIU(u64* ram) : ram(ram) { }
 
     miu_rsp_t eval(miu_req_t req) {
@@ -70,8 +72,12 @@ public:
                     
                     if (fsm == Reading)
                         rsp.r_data = ram[ram_addr];
-                    else
+                    else {
                         ram[ram_addr] = req.w_data;
+
+                        w_buff[0] = req.w_data;
+                        w_pending = true;
+                    }
 
                     beat++;
                 }
@@ -91,6 +97,7 @@ public:
             case Writing:
                 rsp.busy = true;
                 rsp.burst_mask = 1 << beat;
+
                 w_buff[beat] = req.w_data;
                 
                 if (++beat == 8) {
@@ -114,11 +121,10 @@ public:
     }
 
     u64* commit_write() {
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 8; i++)
             ram[req_l.addr/8 + i] = w_buff[i];
-            w_buff[i] = -1;  // just an empty sentinel; pretty sure this value will never appear during testing...
-        }
 
+        w_pending = false;
         return w_buff;
     }
 };

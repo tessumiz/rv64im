@@ -1,5 +1,4 @@
-// supports sv39, sv48 and sv57 (added for fun, was never a strict necessity...)
-module ptw import mem_pkg::*, zicsr_pkg::*; (
+module ptw import mem_pkg::*; (
     input clk,
     input rst,
 
@@ -8,28 +7,20 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
     input logic     w, x, u,  // set w=1 for mark_dirty evict op from tlb
     input mmu_ctx_t mmu_ctx,
 
-    gen_mem_if.master   ram_bus,
+    gen_mem_if.master ram_bus,
 
-    output logic        ready,
-    output logic [43:0] ppn_out,
-    output logic        is_superpage,
-    output logic [2:0]  superpage_mask,
-    output logic page_fault, access_fault
+    output logic ready,
+    output pte_t pte_out,
+
+    output logic is_mega,
+    output logic is_giga,
+
+    output logic page_fault,
+    output logic access_fault
 );
 
     ptw_fsm_t    state;
     ptw_lvl_t    level;
-
-    logic [3:0]  mode;
-    assign mode = mmu_ctx.mode;
-
-    ptw_lvl_t    start_level;
-    assign start_level =
-        (mode == SATP_SV57) ? PTW_LVL4 :
-        (mode == SATP_SV48) ? PTW_LVL3 :
-        (mode == SATP_SV39) ? PTW_LVL2 :
-                              PTW_LVL0;
-
 
     logic [55:12] curr_root;  // ppn (4KiB aligned)
     logic [55:3]  curr_addr;  // 8B aligned
@@ -37,7 +28,7 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
     pte_t    pte;  // pte at (root + offset) [ff]
 
     logic [43:0] pte_ppn;
-    assign pte_ppn = { pte.ppn4, pte.ppn3, pte.ppn2, pte.ppn1, pte.ppn0 };
+    assign pte_ppn = { pte.ppn2, pte.ppn1, pte.ppn0 };
 
     logic    is_leaf;
     logic    misaligned_superpage;
@@ -47,46 +38,15 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
     logic    rmw_A_D;  // Access / Dirty write
 
 
-    logic [8:0] vpn4, vpn3, vpn2, vpn1, vpn0;
-
-
-    logic        pwc_hit;
-    logic [43:0] pwc_lvl1_root;
-
-    pwc_tag_t pwc_tag;
-
-    pwc u_pwc (
-        .clk (clk),
-        .rst (rst),  // sfence.vma asserts this...
-
-        .pwc_in    (pwc_tag),
-
-        .hit       (pwc_hit),
-        .lvl1_root (pwc_lvl1_root),
-
-        .w_en      (
-            (state == PTW_CHECK_PTE) &&
-            (level == PTW_LVL2 && mode != SATP_SV39) &&
-            !(page_fault || is_leaf)
-        ),
-        .w_root    (pte_ppn)
-    );
+    logic [8:0] vpn2, vpn1, vpn0;
 
 
     always_comb begin
-        vpn4 = vaddr.vpn4;
-        vpn3 = vaddr.vpn3;
         vpn2 = vaddr.vpn2;
         vpn1 = vaddr.vpn1;
         vpn0 = vaddr.vpn0;
 
-        pwc_tag = '{
-            vpn4: vpn4, vpn3: vpn3, vpn2: vpn2,
-            asid: mmu_ctx.asid, mode: mode[1:0],
-            default: 0
-        };
-
-        r  = !(w | x);
+        r = !(w | x);
 
         ram_bus.addr = {curr_addr, 3'b0};
 
@@ -114,26 +74,14 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
 
 
         curr_addr  = { curr_root,
-            (level == PTW_LVL4) ? vpn4 :
-            (level == PTW_LVL3) ? vpn3 :
             (level == PTW_LVL2) ? vpn2 :
-            (level == PTW_LVL1) ? vpn1 :
-                                  vpn0
+            (level == PTW_LVL1) ? vpn1 : vpn0
         };
 
-        ppn_out = pte_ppn;
-        unique case (level)
-            PTW_LVL4: ppn_out[35:0] = { vpn3, vpn2, vpn1, vpn0 };
-            PTW_LVL3: ppn_out[26:0] = { vpn2, vpn1, vpn0 };
-            PTW_LVL2: ppn_out[17:0] = { vpn1, vpn0 };
-            PTW_LVL1: ppn_out[8:0]  = vpn0;
-            PTW_LVL0: ;
-        endcase
+        pte_out = pte;
 
 
         misaligned_superpage = (
-            (level == PTW_LVL4 && { pte.ppn3, pte.ppn2, pte.ppn1, pte.ppn0 } != 0) ||
-            (level == PTW_LVL3 && { pte.ppn2, pte.ppn1, pte.ppn0 } != 0) ||
             (level == PTW_LVL2 && { pte.ppn1, pte.ppn0 } != 0) ||
             (level == PTW_LVL1 && pte.ppn0 != 0)
         );
@@ -154,14 +102,8 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
             (!is_leaf & (pte.d | pte.a | pte.u | (level == PTW_LVL0)))
         );
 
-        is_superpage = level != PTW_LVL0;
-
-        superpage_mask = (
-            level == PTW_LVL4 ? PETA_PAGE :
-            level == PTW_LVL3 ? TERA_PAGE :
-            level == PTW_LVL2 ? GIGA_PAGE :
-                                MEGA_PAGE
-        );
+        is_mega = (level == PTW_LVL1);
+        is_giga = (level == PTW_LVL2);
 
         access_fault = (ram_bus.ready && ram_bus.access_fault);
 
@@ -180,34 +122,13 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
             unique case (state)
                 PTW_IDLE : begin
                     if (valid) begin
-                        /*
-                        (inp_delay + t(decode) + mux + r_en(setup)) creates a critical path
-                        otherwise not an issue for subsequent level walks as the latency
-                        is tCQ of level ff instead of inp_delay.
-                        
-                        Basically, subsequent level-ff's tCQ is small and predictable, unlike
-                        the input; if the mem controller buffers the tlb's request for 1 cycle,
-                        fine but I wanted to make it safe enough.
+                        // crit path analysis deferred till the asic route opens...
 
-                        Instead of wasting a clock cycle with a lame state like PTW_SETUP,
-                        I've used the extra time for checking a pwc. Yeah, might be overkill
-                        but it doesn't affect clk freq
-                        */
-
-                        state     <= PTW_CHECK_PWC;
-                        level     <= start_level;
+                        state     <= PTW_READ;
+                        level     <= PTW_LVL2;
                         curr_root <= mmu_ctx.root_ppn;
                         pte       <= '0;
                     end
-                end
-
-                PTW_CHECK_PWC : begin
-                    if (pwc_hit) begin
-                        level     <= PTW_LVL1;
-                        curr_root <= pwc_lvl1_root;
-                    end
-
-                    state <= PTW_READ;
                 end
 
                 PTW_READ : begin
@@ -226,6 +147,9 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
                 the bus latencies bw ptw and dram.
 
                 Previously had a fwd-mux for ram_bus.r_data, removed it...
+
+                * P.S. I'm keeping all this perf work until the asic synth. Rn, correctness is
+                  the priority (what I ditched at the start for assumed "performance")
                 */
                 PTW_CHECK_PTE : begin
                     if (page_fault)
@@ -239,12 +163,7 @@ module ptw import mem_pkg::*, zicsr_pkg::*; (
 
                     else begin
                         state <= PTW_READ;
-
-                        level <= (level == PTW_LVL4) ? PTW_LVL3 :
-                                 (level == PTW_LVL3) ? PTW_LVL2 :
-                                 (level == PTW_LVL2) ? PTW_LVL1 :
-                                 PTW_LVL0;
-
+                        level <= (level == PTW_LVL2) ? PTW_LVL1 : PTW_LVL0;
                         curr_root <= pte_ppn;
                     end
                 end

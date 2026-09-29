@@ -50,7 +50,8 @@ class Cache {
 
 
     u8 get_victim(u8 set) {
-        for (u8 i = 0; i < WAYS; i++)
+        // fix; rtl selects last invalid way!!
+        for (int i = WAYS - 1; i >= 0; i++)
             if (!meta[set][i].v) return i;
 
         u8 p = plru[set];
