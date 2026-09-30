@@ -1,46 +1,47 @@
 #!/bin/bash
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
+set -e
 
-mkdir -p sw/build
-mkdir -p sw/logs
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "Building Verilator model..."
-verilator -Wall --cc --exe --build sw/tb.cpp -f files.f -Wno-fatal --quiet-exit
+cd "$ROOT_DIR"
 
-for test_file in $(find sw/tests -type f -name "*.S"); do
-    
-    test_suite=$(basename $(dirname "$test_file"))
-    test_name=$(basename "$test_file" .S)
-    
-    log_file="sw/logs/${test_suite}_${test_name}.log"
-    
-    if ! riscv64-unknown-elf-gcc \
-        -I sw/tests/include \
-        -I riscv-tests/isa/macros/scalar \
-        -I riscv-tests/env/p \
-        -I riscv-tests/env \
-        -march=rv64g -mabi=lp64 -mcmodel=medany \
-        -nostdlib -nostartfiles \
-        -T sw/linker.ld \
-        "$test_file" -o "sw/build/${test_name}.elf" > "$log_file" 2>&1; then
-        
-        echo -e "${RED}[GCC FAIL]${NC} [$test_suite] $test_name"
-        cat "$log_file"
-        continue
-    fi
-    
-    riscv64-unknown-elf-objcopy -O binary "sw/build/${test_name}.elf" "sw/build/test.bin"
-    
-    ./obj_dir/Vdefs_pkg > "$log_file" 2>&1
-    
-    result=$(tail -n 1 "$log_file")
-    
-    if [[ "$result" == *"PASS"* ]]; then
-        echo -e "${GREEN}[PASS]${NC} [${test_suite}] $test_name"
-    else
-        echo -e "${RED}[FAIL]${NC} [${test_suite}] $test_name"
-        echo "       -> See log: $log_file"
-    fi
-done
+echo "=== [1/3] Compiling RTL and C++ Testbench ==="
+
+rm -rf "$ROOT_DIR/sw/build"
+
+mkdir -p "$ROOT_DIR/sw/build"
+mkdir -p "$ROOT_DIR/sw/logs"
+
+verilator -Wall \
+    --cc \
+    --exe \
+    --build \
+    --coverage \
+    --trace-fst \
+    -f "$ROOT_DIR/cache_tb.f" \
+    "$ROOT_DIR/sw/tb/tb.cpp" \
+    -CFLAGS "-std=c++17 -I$ROOT_DIR/sw/tb/include -I$ROOT_DIR/sw/tb" \
+    --top-module tb_cache_top \
+    --Mdir "$ROOT_DIR/sw/build" \
+    -Wno-fatal
+
+echo
+echo "=== [2/3] Running 10-Million Cycle Simulation ==="
+
+"$ROOT_DIR/sw/build/Vtb_cache_top"
+
+echo
+echo "=== [3/3] Generating SystemVerilog Coverage Report ==="
+
+if [ -f "$ROOT_DIR/sw/logs/coverage.dat" ]; then
+    mkdir -p "$ROOT_DIR/sw/logs/annotated_src"
+
+    verilator_coverage \
+        --annotate "$ROOT_DIR/sw/logs/annotated_src" \
+        "$ROOT_DIR/sw/logs/coverage.dat"
+else
+    echo "WARNING: coverage.dat was not generated."
+fi
+
+echo
+echo "=== DONE ==="

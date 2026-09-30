@@ -127,7 +127,7 @@ interface tlb_if import defs_pkg::uint, mem_pkg::*; #(
         logic            page_fetched;
         DATA_T           fetched_page;
         logic            fetched_is_super;
-        superpage_mask_t fetched_super_mask;
+        logic [1:0] fetched_super_mask;  // dummy
         logic            fetch_fault;
         logic            evict_done;
     } mem_rsp_t;

@@ -10,3 +10,4 @@ raylib
 
 riscv-tests/
 sw/tb/tests/
+sw/build/

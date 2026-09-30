@@ -10,5 +10,5 @@ using u64 = std::uint64_t;
 using i64 = std::int64_t;
 
 
-#define KB *1024;
-#define MB *1024*1024;
+#define KB *1024
+#define MB *1024*1024

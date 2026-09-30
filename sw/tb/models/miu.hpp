@@ -28,29 +28,31 @@ class MIU {
     int  delay = -1;
     int  beat = 0;
 
-    u64  w_buff[8];
+    enum { Idle, RamAccess, Reading, Writing } fsm = Idle;
 
-    enum { Idle, RamAccess, Reading, Writing, Draining } fsm = Idle;
+    bool aborted = false;
+
+    miu_rsp_t rsp = {};
 
 
 public:
     bool w_pending = false;
+    u64  w_buff[8];
 
     MIU(u64* ram) : ram(ram) { }
 
-    miu_rsp_t eval(miu_req_t req) {
-        miu_rsp_t rsp = {};
-
+    miu_rsp_t& eval(miu_req_t req) {
         if (req.abort) {
-            if (fsm == RamAccess)
-                fsm = Idle;
-
-            else if (fsm == Reading || fsm == Writing)
-                fsm = Draining;
+            aborted = true;
+            w_pending = false;
         }
+
 
         switch (fsm) {
             case Idle:
+                aborted = false;
+                rsp = {};
+
                 if (!req.abort && (req.r_en || req.w_en)) {
                     req_l = req;
                     delay = (rand() % 10) + 1;
@@ -64,17 +66,23 @@ public:
 
                 if (--delay == 0) {
                     rsp.ready = true;
+
+                    if (aborted) {
+                        rsp.busy = false;
+
+                        fsm = Idle;
+                        break;
+                    }
+
                     fsm = req_l.r_en ? Reading : Writing;
                     beat = 0;
 
-                    rsp.burst_mask = 0;
-                    u32 ram_addr = req_l.addr/8 + beat;
-                    
+                    rsp.burst_mask = 1;
+                    u32 ram_addr = ((req_l.addr & 0x3FFFFF) / 8) + beat;
+
                     if (fsm == Reading)
                         rsp.r_data = ram[ram_addr];
                     else {
-                        ram[ram_addr] = req.w_data;
-
                         w_buff[0] = req.w_data;
                         w_pending = true;
                     }
@@ -83,48 +91,52 @@ public:
                 }
                 break;
 
-            case Reading:
-                rsp.busy = true;
-                rsp.burst_mask = 1 << beat;
-                rsp.r_data = ram[req_l.addr/8 + beat];
-                
+            case Reading:                
+                if (!aborted) {
+                    rsp.burst_mask = 1 << beat;
+                    rsp.r_data = ram[((req_l.addr & 0x3FFFFF) / 8) + beat];
+                }
+
                 if (++beat == 8) {
                     rsp.burst_done = true;
+
+                    rsp.busy  = false;
+                    rsp.ready = false;
+
                     fsm = Idle;
+                    break;
                 }
                 break;
 
             case Writing:
-                rsp.busy = true;
-                rsp.burst_mask = 1 << beat;
-
-                w_buff[beat] = req.w_data;
-                
-                if (++beat == 8) {
-                    rsp.burst_done = true;
-                    fsm = Idle;
+                if (!aborted) {
+                    rsp.burst_mask = 1 << beat;
+                    w_buff[beat] = req.w_data;
                 }
-                break;
-
-            case Draining:
-                rsp.busy = true;
-                rsp.burst_mask = 1 << beat;
 
                 if (++beat == 8) {
+                    if (aborted) w_pending = false;
+
                     rsp.burst_done = true;
+
+                    rsp.busy  = false;
+                    rsp.ready = false;
+
                     fsm = Idle;
+                    break;
                 }
                 break;
         }
 
         return rsp;
     }
-
-    u64* commit_write() {
-        for (int i = 0; i < 8; i++)
-            ram[req_l.addr/8 + i] = w_buff[i];
-
-        w_pending = false;
-        return w_buff;
-    }
 };
+
+
+/*
+| RamAccess | RW | Idle |
+
+*----busy---------------*
+            *---ready---*
+                 * burst_done (beat 8)
+*/

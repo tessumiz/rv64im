@@ -2,7 +2,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     input  logic clk,
     input  logic rst,
     input  logic flush,  // triggers dirty wb fsm
-    input  logic abort_sig,
+    input  logic abort_sig,  // cpp name coll with 'abort' (verilator)
 
     set_cache_if.cache bus
 );
@@ -77,6 +77,10 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     way_idx_t victim_way;
 
 
+    // worth it, or pay the 1 cycle of latency which gets amortized? what if I add an L2 cache?
+    logic [63:0] beat_8_read_fwd;
+
+
     /*
     A separate clr_in_prog ff was removed; CACHE_CLR was added to state.
     This saves an ff at the expense of more comb logic (minor)
@@ -115,6 +119,9 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         else begin
             unique case (state)
                 CACHE_IDLE : begin
+                    /* irq amidst a dcu cache is still undecided, if I would break it down into
+                       an abort followed by a flush signal; flush in this case must at least be
+                       held for 2 cycles then. Let's see... */
                     if (flush) begin
                         state         <= CACHE_FLUSH;
                         curr_clr_addr <= 1;
@@ -215,6 +222,9 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                     end
                 end
 
+
+                /* BIG GOTCHA; abort during evict renders the particular main memory stale with
+                   torn, incomplete write; the local cache line would still be marked as dirty */
                 CACHE_EVICT : begin
                     // handle RAM errors later; for now, assume evict always succeeds
                     if (bus.miu_rsp.burst_done)
@@ -243,7 +253,9 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                 CACHE_R_FILL : begin
                     if (bus.miu_rsp.burst_done) begin
                         state <= CACHE_READ_AFTER_R_FILL;
+
                         curr_data <= data_mem[req_set_idx];
+                        beat_8_read_fwd <= bus.miu_rsp.r_data;
 
                         meta[req_set_idx][victim_way] <= '{ valid: 1, dirty: 0 };
                     end
@@ -330,6 +342,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     assign      burst_mask = bus.miu_rsp.burst_mask;
 
 
+
     always_comb begin
         victim_tag  = curr_tag[victim_way];
         victim_data = curr_data[victim_way];
@@ -354,7 +367,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
         bus.miu_req.addr =
             (state == CACHE_FLUSH_DIRTY_SET) ?
               { flush_tag.ppn,  curr_clr_addr - 1'b1, 6'b0 }
-            : { victim_tag.ppn, req_set_idx, 6'b0 };
+            : { req_tag.ppn, req_set_idx, 6'b0 };
 
         w_sel_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_data : victim_data;
 
@@ -418,7 +431,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         bus.rsp.busy  = (state != CACHE_IDLE) && !bus.rsp.ready;  // readys leads CACHE_IDLE, hence why gated here
 
-        r_filled_data  = curr_data[victim_way];
+        r_filled_data  = { beat_8_read_fwd, curr_data[victim_way][447:0] };
 
         bus.rsp.r_data = hit ? hit_data[req_blk_offset * 64 +: 64] 
                              : r_filled_data[req_blk_offset * 64 +: 64];

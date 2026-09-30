@@ -45,13 +45,11 @@ class Cache {
 
     // it's pointless to connect this with the miu after all...
     u64* ram;
-    u64  buff_w[8];
-    u64  buff_w_addr;
 
 
     u8 get_victim(u8 set) {
         // fix; rtl selects last invalid way!!
-        for (int i = WAYS - 1; i >= 0; i++)
+        for (int i = WAYS - 1; i >= 0; i--)
             if (!meta[set][i].v) return i;
 
         u8 p = plru[set];
@@ -97,6 +95,10 @@ class Cache {
 
 
 public:
+    u64  w_buff[8];
+    u64  w_buff_addr;
+
+
     Cache(u64* ram) : ram(ram) { }
 
     Line read_mem(u64 addr) {
@@ -110,19 +112,10 @@ public:
     }
 
     void write_mem(u64 addr, Line d) {
-        buff_w_addr = addr;
+        w_buff_addr = addr;
 
         for (int i = 0; i < 8; i++)
-            buff_w[i] = d.w[i];
-    }
-
-    u64* commit_write() {
-        u32 base = (buff_w_addr & 0x3FFFFF) / 8;
-
-        for (int i = 0; i < 8; i++)
-            ram[base + i] = buff_w[i];
-
-        return buff_w;
+            w_buff[i] = d.w[i];
     }
 
     sim_rsp_t eval(sim_req_t req) {
@@ -175,7 +168,11 @@ public:
             for (int w = 0; w < WAYS; w++) {
                 if (meta[s][w].v && meta[s][w].d) {
                     u64 fill_addr = (tag[s][w] << 12) | (s << 6);
-                    write_mem(fill_addr, data[s][w]);
+                    u32 base = (fill_addr & (4 MB - 1)) / 8;
+
+                    for (int i = 0; i < 8; i++)
+                        ram[base + i] = data[s][w].w[i];
+
                     meta[s][w].d = false;
                 }
             }
