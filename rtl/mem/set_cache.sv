@@ -29,7 +29,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     */
     TAG_T  [WAYS-1:0] tag_mem  [SETS-1:0];
     DATA_T [WAYS-1:0] data_mem [SETS-1:0];
-    meta_t [WAYS-1:0] meta     [SETS-1:0];
+    meta_t [WAYS-1:0] meta [SETS-1:0] /* verilator public */;
 
     TAG_T  [WAYS-1:0] curr_tag;
     DATA_T [WAYS-1:0] curr_data;
@@ -81,11 +81,6 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
     logic [63:0] beat_8_read_fwd;
 
 
-    /*
-    A separate clr_in_prog ff was removed; CACHE_CLR was added to state.
-    This saves an ff at the expense of more comb logic (minor)
-    */
-
     // set_idx of the set being cleared (and NOT flushed, as it lags by 1 cycle)
     logic [$clog2(SETS):0] curr_clr_addr;
 
@@ -126,6 +121,8 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                         state         <= CACHE_FLUSH;
                         curr_clr_addr <= 1;
                         curr_meta     <= meta[0];
+                        curr_tag      <= tag_mem[0];
+                        curr_data     <= data_mem[0];
                     end
 
                     else if (bus.req.r_en || bus.req.w_en) begin
@@ -175,7 +172,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
                 CACHE_FLUSH_DIRTY_SET : begin
                     if (curr_way_dirty) begin
-                        if (bus.miu_rsp.ready) begin
+                        if (bus.miu_rsp.burst_done) begin
                             if (set_flushed) begin
                                 state     <= CACHE_FLUSH;
                                 curr_meta <= '0;
@@ -211,7 +208,6 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                                 $error("Eviction taken during hit; subword fill unrequired for hits");
 
                         state <= CACHE_EVICT;
-                        meta[req_set_idx][victim_way].valid <= 0;
                     end
 
                     else begin
@@ -227,8 +223,11 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                    torn, incomplete write; the local cache line would still be marked as dirty */
                 CACHE_EVICT : begin
                     // handle RAM errors later; for now, assume evict always succeeds
-                    if (bus.miu_rsp.burst_done)
+                    if (bus.miu_rsp.burst_done) begin
                         state <= CACHE_REQ_FILL;
+
+                        meta[req_set_idx][victim_way].valid <= 0;
+                    end
                 end
 
                 CACHE_REQ_FILL : begin
@@ -273,7 +272,11 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
                 default: ;
             endcase
 
-            if (abort_sig) state <= CACHE_IDLE;
+            if (abort_sig) begin
+                state <= CACHE_IDLE;
+                if (state == CACHE_REQ_FILL || state == CACHE_W_FILL || state == CACHE_R_FILL)
+                    meta[req_set_idx][victim_way].valid <= 0;
+            end
         end
     end
 
@@ -366,8 +369,11 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
         bus.miu_req.addr =
             (state == CACHE_FLUSH_DIRTY_SET) ?
-              { flush_tag.ppn,  curr_clr_addr - 1'b1, 6'b0 }
+              { flush_tag.ppn,  6'(curr_clr_addr - 1'b1), 6'b0 }
+            : (state == CACHE_TAG_CMP && miss && victim_present) ?  // another candidate for our mealy-to-moore refactor
+              { victim_tag.ppn, req_set_idx, 6'b0 }
             : { req_tag.ppn, req_set_idx, 6'b0 };
+
 
         w_sel_data = (state == CACHE_FLUSH_DIRTY_SET) ? flush_data : victim_data;
 
@@ -410,13 +416,13 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
             w_data  = {8{bus.miu_rsp.r_data}};
 
             w_wmask = {
-                {8{burst_mask[7]}}, 
-                {8{burst_mask[6]}}, 
-                {8{burst_mask[5]}}, 
-                {8{burst_mask[4]}}, 
-                {8{burst_mask[3]}}, 
-                {8{burst_mask[2]}}, 
-                {8{burst_mask[1]}}, 
+                {8{burst_mask[7]}},
+                {8{burst_mask[6]}},
+                {8{burst_mask[5]}},
+                {8{burst_mask[4]}},
+                {8{burst_mask[3]}},
+                {8{burst_mask[2]}},
+                {8{burst_mask[1]}},
                 {8{burst_mask[0]}}
             };
         end
@@ -425,7 +431,7 @@ module set_cache import mem_pkg::*, defs_pkg::uint; (
 
     always_comb begin
         // fill_data must remain stable till ready fires
-        bus.rsp.ready = (state == CACHE_TAG_CMP && req_r_en && hit) ||
+        bus.rsp.ready = (state == CACHE_TAG_CMP && hit) ||
                         (state == CACHE_READ_AFTER_R_FILL) ||
                         (state == CACHE_NORM_WRITE);
 

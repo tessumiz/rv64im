@@ -86,4 +86,18 @@ module tb_cache_top import mem_pkg::*; (
         .bus   (bus.cache)
     );
 
+    bind set_cache cache_cov u_cache_cov (
+        .clk          (clk),
+        .rst          (rst),
+        .state        (state),
+        .req_r_en     (req_r_en),
+        .req_w_en     (req_w_en),
+        .req_w_mask   (req_w_mask),
+        .hit          (hit),
+        .ready        (bus.rsp.ready),
+        .abort_sig    (abort_sig),
+        .flush        (flush),
+        .miu_w_en     (bus.miu_req.w_en)
+    );
+
 endmodule

@@ -38,6 +38,7 @@ struct Line {
 };
 
 class Cache {
+public:
     Meta meta[SETS][WAYS] = {};
     u64  tag[SETS][WAYS] = {};
     Line data[SETS][WAYS] = {};
@@ -45,6 +46,9 @@ class Cache {
 
     // it's pointless to connect this with the miu after all...
     u64* ram;
+
+    u64  w_buff[8];
+    u64  w_buff_addr;
 
 
     u8 get_victim(u8 set) {
@@ -92,11 +96,6 @@ class Cache {
             }
         }
     }
-
-
-public:
-    u64  w_buff[8];
-    u64  w_buff_addr;
 
 
     Cache(u64* ram) : ram(ram) { }
@@ -178,4 +177,14 @@ public:
             }
         }
     }
+
+    void force_evict(sim_req_t req) {
+        u8 tgt = get_victim(req.set);
+        if (meta[req.set][tgt].v && meta[req.set][tgt].d) {
+            meta[req.set][tgt].v = false;
+            meta[req.set][tgt].d = false;
+        }
+    }
+
+    
 };
