@@ -105,7 +105,8 @@ package mem_pkg;
 
 
     typedef struct packed {
-        logic [43:0] ppn;
+        logic [47:44] padding;  // openRAM
+        logic [21:0]  ppn;
     } dcache_tag_t;
 
 

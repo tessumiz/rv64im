@@ -37,8 +37,6 @@ package defs_pkg;
 
 
     typedef struct packed {
-        logic valid;
-
         logic alu_src1_pc;
         logic alu_src2_imm;
         logic is_mul;
@@ -93,6 +91,7 @@ package defs_pkg;
         logic [2:0]  f3;
         logic [6:0]  f7;
 
+        logic  valid;
         ctrl_t ctrl;
         exc_t  exc;
     } id_ex_t;
@@ -108,6 +107,7 @@ package defs_pkg;
         logic [4:0]  rs2_a;
         logic [2:0]  f3;
 
+        logic  valid;
         ctrl_t ctrl;
         exc_t  exc;
     } ex_mem_t;
@@ -122,6 +122,7 @@ package defs_pkg;
         logic [63:0] csr_new_data;
         logic [11:0] csr_addr;
 
+        logic  valid;
         ctrl_t ctrl;
         exc_t  exc;
     } mem_wb_t;
@@ -133,5 +134,12 @@ package defs_pkg;
         logic wb_fwd_rs1;
         logic wb_fwd_rs2;
     } fwd_sig_t;
+
+
+    typedef struct packed {
+        logic        valid;
+        logic [4:0]  rd;
+        logic [63:0] data;
+    } wb_bus_t;
 
 endpackage

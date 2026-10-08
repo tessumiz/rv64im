@@ -62,36 +62,40 @@ module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
     csr_trap_if u_csr_trap_bus();
 
 
-    gen_reg #(.T(if_id_t)) u_if_id_reg (
-        .clk (clk),
-        .en  (~if_id_stall),
-        .clr (if_id_flush || rst),
-        .d   (if_id_d),
-        .q   (if_id_q)
+    pipe_reg #(.T(if_id_t)) u_if_id_reg (
+        .clk   (clk),
+        .rst_n (~rst),
+        .flush (if_id_flush),
+        .stall (if_id_stall),
+        .d     (if_id_d),
+        .q     (if_id_q)
     );
 
-    gen_reg #(.T(id_ex_t)) u_id_ex_reg (
-        .clk (clk),
-        .en  (~id_ex_stall),
-        .clr (id_ex_flush || rst),
-        .d   (id_ex_d),
-        .q   (id_ex_q)
+    pipe_reg #(.T(id_ex_t)) u_id_ex_reg (
+        .clk   (clk),
+        .rst_n (~rst),
+        .flush (id_ex_flush),
+        .stall (id_ex_stall),
+        .d     (id_ex_d),
+        .q     (id_ex_q)
     );
 
-    gen_reg #(.T(ex_mem_t)) u_ex_mem_reg (
-        .clk (clk),
-        .en  (~ex_mem_stall),
-        .clr (ex_mem_flush || rst),
-        .d   (ex_mem_d),
-        .q   (ex_mem_q)
+    pipe_reg #(.T(ex_mem_t)) u_ex_mem_reg (
+        .clk   (clk),
+        .rst_n (~rst),
+        .flush (ex_mem_flush),
+        .stall (ex_mem_stall),
+        .d     (ex_mem_d),
+        .q     (ex_mem_q)
     );
 
-    gen_reg #(.T(mem_wb_t)) u_mem_wb_reg (
-        .clk (clk),
-        .en  (~mem_wb_stall),
-        .clr (mem_wb_flush || rst),
-        .d   (mem_wb_d),
-        .q   (mem_wb_q)
+    pipe_reg #(.T(mem_wb_t)) u_mem_wb_reg (
+        .clk   (clk),
+        .rst_n (~rst),
+        .flush (mem_wb_flush),
+        .stall (mem_wb_stall),
+        .d     (mem_wb_d),
+        .q     (mem_wb_q)
     );
 
 
@@ -227,7 +231,7 @@ module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
     //     muldiv_in.is_wd_op = id_ex_q.ctrl.is_wd_op;
 
     //     muldiv_in.ready     = (is_mul || is_div)  && !mem_branch;
-    //     muldiv_in.mark_spec = ex_mem_q.ctrl.valid && !mem_branch;
+    //     muldiv_in.mark_spec = ex_mem_q.valid && !mem_branch;
     // end
 
     // muldiv_out_if mul_out();
@@ -354,10 +358,10 @@ module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
     //     // Flushes the WB stage during a multi-cycle memory stall to prevent spurious commits
     //     mem_wb_flush = trap_flush  || mem_stall;
 
-    //     mul_out.mark_safe = ex_mem_q.ctrl.valid && !mem_branch;
+    //     mul_out.mark_safe = ex_mem_q.valid && !mem_branch;
     //     div_out.mark_safe = mul_out.mark_safe;
 
-    //     mul_out.flush_spec = ex_mem_q.ctrl.valid && mem_branch;
+    //     mul_out.flush_spec = ex_mem_q.valid && mem_branch;
     //     div_out.flush_spec = mul_out.flush_spec;
     // end
 
@@ -446,10 +450,10 @@ module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
 // assign dbg_if_pc    = if_id_q.pc;
 // assign dbg_if_ins   = if_id_q.ins;
 
-// assign dbg_id_valid = id_ex_q.ctrl.valid;
+// assign dbg_id_valid = id_ex_q.valid;
 // assign dbg_id_pc    = id_ex_q.pc;
 
-// assign dbg_ex_valid = id_ex_q.ctrl.valid;
+// assign dbg_ex_valid = id_ex_q.valid;
 // assign dbg_ex_pc    = id_ex_q.pc;
 // assign dbg_ex_rs1_a = id_ex_q.rs1_a;
 // assign dbg_ex_rs2_a = id_ex_q.rs2_a;
@@ -457,12 +461,12 @@ module pipeline import defs_pkg::*, zicsr_pkg::trap_t; (
 // assign dbg_ex_f3    = id_ex_q.f3;
 // assign dbg_ex_f7    = id_ex_q.f7;
 
-// assign dbg_mem_valid = ex_mem_q.ctrl.valid;
+// assign dbg_mem_valid = ex_mem_q.valid;
 // assign dbg_mem_pc    = ex_mem_q.pc;
 // assign dbg_mem_rd    = ex_mem_q.rd;
 // assign dbg_mem_f3    = ex_mem_q.f3;
 
-// assign dbg_wb_valid = mem_wb_q.ctrl.valid;
+// assign dbg_wb_valid = mem_wb_q.valid;
 // assign dbg_wb_pc    = mem_wb_q.pc;
 // assign dbg_wb_rd    = mem_wb_q.rd;
 

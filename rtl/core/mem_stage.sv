@@ -185,6 +185,7 @@ module mem_stage import defs_pkg::*, mem_pkg::*, zicsr_pkg::*; (
         out.csr_addr     = ex_mem.csr_w_addr;
 
         out.ctrl         = ex_mem.ctrl;
+        out.valid        = ex_mem.valid;
         out.ctrl.wb      = ex_mem.ctrl.wb     && safe;  // gating this signal early
         out.ctrl.is_csr  = ex_mem.ctrl.is_csr && safe;
         out.ctrl.csr_we  = ex_mem.ctrl.csr_we && safe;
@@ -265,7 +266,7 @@ logic        dbg_misaligned      /* verilator public_flat */;
 // logic        dbg_wb              /* verilator public_flat */;
 // logic [63:0] dbg_fwd_data        /* verilator public_flat */;
 
-// assign dbg_valid    = ex_mem.ctrl.valid;
+// assign dbg_valid    = ex_mem.valid;
 // assign dbg_pc       = ex_mem.pc;
 // assign dbg_rd       = ex_mem.rd;
 

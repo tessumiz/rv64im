@@ -45,7 +45,7 @@ module writeback import defs_pkg::*; (
 // logic [4:0]  dbg_fwd_rd         /* verilator public_flat */;
 // logic [63:0] dbg_fwd_data       /* verilator public_flat */;
 
-// assign dbg_valid = mem_wb.ctrl.valid;
+// assign dbg_valid = mem_wb.valid;
 // assign dbg_pc    = mem_wb.pc;
 
 // assign dbg_rd   = mem_wb.rd;

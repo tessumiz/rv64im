@@ -9,19 +9,19 @@ module regfile(
     output logic [63:0] rs2
 );
 
-    logic [63:0] regs [0:31];
+    logic [63:0] regs [31:1];
 
     always_comb begin
         rs1 = (wb_en && rd == rs1_a) ? wb_data :
+              (rs1_a == 0) ? 0 :
               regs[rs1_a];
 
         rs2 = (wb_en && rd == rs2_a) ? wb_data :
+              (rs2_a == 0) ? 0 :
               regs[rs2_a];
     end
 
     always_ff @(posedge clk) begin
-        regs[0] <= 0;
-
         if (wb_en && rd != 0)
             regs[rd] <= wb_data;
     end

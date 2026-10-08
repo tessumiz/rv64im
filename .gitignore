@@ -12,3 +12,5 @@ riscv-tests/
 sw/tb/tests/
 sw/build/
 sw/logs/
+synth/
+sv2v-Linux/

@@ -1,7 +1,8 @@
 module decode import defs_pkg::*, zicsr_pkg::*; (
     input logic clk,
 
-    wb_if.slave wb_bus,
+    input wb_bus_t wb_bus_in,
+
     csr_rw_if.r_master csr_bus,
 
     input logic [1:0] priv,
@@ -40,9 +41,9 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
         .clk     (clk),
         .rs1_a   (rs1_a),
         .rs2_a   (rs2_a),
-        .rd      (wb_bus.rd),
-        .wb_data (wb_bus.data),
-        .wb_en   (wb_bus.valid),
+        .rd      (wb_bus_in.rd),
+        .wb_data (wb_bus_in.data),
+        .wb_en   (wb_bus_in.valid),
 
         .rs1     (rs1),
         .rs2     (rs2)
@@ -97,8 +98,8 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
             {32'b0, if_id.ins};
 
         ctrl_tmp.wb &= (rd != 0);
-        out.ctrl = ctrl_tmp;
-        out.ctrl.valid &= if_id.valid;
+        out.ctrl  = ctrl_tmp;
+        out.valid = if_id.valid;
     end
 
 
@@ -154,7 +155,7 @@ module decode import defs_pkg::*, zicsr_pkg::*; (
 // assign dbg_out_rs1 = out.rs1;
 // assign dbg_out_rs2 = out.rs2;
 
-// assign dbg_ctrl_valid = out.ctrl.valid;
+// assign dbg_ctrl_valid = out.valid;
 // assign dbg_ctrl_br    = out.ctrl.br;
 // assign dbg_ctrl_jmp   = out.ctrl.jmp;
 // assign dbg_ctrl_we = out.ctrl.wb;

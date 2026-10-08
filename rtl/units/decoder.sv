@@ -30,7 +30,6 @@ module decoder import defs_pkg::*, zicsr_pkg::*; (
         has_rs2 = 0;
 
         ctrl = '0;
-        ctrl.valid = 1;
 
         exc = '0;
         csr_w_op = 0;

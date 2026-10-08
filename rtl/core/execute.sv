@@ -95,6 +95,7 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
         out.rs2_a  = id_ex.rs2_a;
         out.f3     = id_ex.f3;
         out.ctrl   = id_ex.ctrl;
+        out.valid  = id_ex.valid;
         out.exc    = id_ex.exc;
     end
 
@@ -131,7 +132,7 @@ module execute import defs_pkg::*, zicsr_pkg::*; (
 // logic        dbg_ctrl_imm2     /* verilator public_flat */;
 // logic        dbg_ctrl_wd       /* verilator public_flat */;
 
-// assign dbg_valid = id_ex.ctrl.valid;
+// assign dbg_valid = id_ex.valid;
 // assign dbg_pc    = id_ex.pc;
 // assign dbg_imm   = id_ex.imm;
 
