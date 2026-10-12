@@ -1,5 +1,5 @@
 # IMPORTANT
-* Phy mem is now 4GB (including mmio) aka 20 bits of ppn, a > 50%  save
+* Phy mem is now 8GB (including mmio) aka 20 bits of ppn, a > 50%  save
 
 
 ## 1

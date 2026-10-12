@@ -1,32 +1,60 @@
 // Refer 7/10/26's commit to view the first draft
 
 
+
+# TO TRY (ASIC FLOW)
+====================
+>> Check Tsu viols in (offset_from_alu => cache_tag_sram)
+
+>> Check if tlb fault check can be squeezed into cycle-1
+
+>> DFFs vs SRAM for tag/meta ROI
+
+1. Store valid and dirty in the tag
+
+Do not add write masks. The only cases which write-masks facilitate is when dirty has to change
+from 0 to 1, which could be done with RMW. Setting a new tag after a fill can have the valid and
+dirty bits hardwired to 10 respectively. Since we only have a single core, and isn't ooo, AND since
+we have ASIDs, the only actual case where data needs flushing would be in a JIT case; code in the
+dcache must move to the icache to exec.
+Which is rare, so I can either:
+
+(i) Write valid, dirty as 00 and tag as garbage (which means flushing removes the data from the
+cache itself after eviction, aka assumes you wouldn't be needing it)
+
+(ii) RMW to preserve valid=1 and tag (2 cycle latency added to the eviction latency; compare this
+with evicts to say the L2 cache and if this extra latency is negligible)
+
+The only edge case I think I need to bother about is I2<w, hit, !dirty> and I1<going to miss,
+victim unfortunately gets chosen as I2's, at which point I suppose I need a comparator between
+mem2 and mem3 to get the new dirty value; new_dirty = old_dirty || (victim_matches && mem3.dirty)
+
+
+2.
+Use DFFs. Fear of routing issues, fear of lavishness (area/cost).
+
+
+
 Stage-1
 -------
 
 >> (offset, valid) is fwd-ed from EX to dcache, while the latched
    ones go to the tlb (not planning to keep the ff inside the tlb since
    I might reuse the same tlb for IFU too at which point PC is implicitly
-   the input latch ff)
+   the input latch ff).
 
->> the dcache reads the sram data, while the tlb translates addr,
-   iff valid is set (valid => .valid && !.exc.valid)
+>> the dcache reads cache's tag_mem, while the tlb translates addr,
+   iff valid is set (valid => .valid && !.exc.valid).
+   NEW: the tag mem now includes
+
+>> valid_ffs is also read (8B net)
 
 >> tlb misses are handled here; stall for ex and flush for dcu1
 
->> dcu1 ff <= ppn, vpn, offset, w_en, valid, all tag ways for the set,
+>> dcu1 ff <= ppn, vpn, offset, w_en, valid, valid_meta, all tag ways for the set,
               wdata, wmask, exc, ... (pc, wb, csr, all of those)
 
 >> ptw fetches can be aborted with a signal
-
-
-Crit (potential)
-================
-
-This is for the tlb:
-
-Tcq + T(ff-read) + Tcmp + T(way-mux) + T(norm/super mux) + Tsu (dcu1) ;  ff-read meaning Tcq + associated comb
-                 |_  superpage cam  _| ;  happens in parallel
 
 
 Stage-2
@@ -59,14 +87,6 @@ Stage-2
               wdata, wmask, exc, ...
 
 
-Crit
-====
-Tcq(dcu1) + 22-bit cmp (6-depth) + way mux (3-depth for 8-way) + Tsu(dcu2) ;  dcu2 ff path
-                                 |
-                                 |_ hit sig (3-depth redn-OR)  + [valid && !exc && !irq && !pg_fault && hit]
-                                    (3-4 depth) + Tsu(r_en) ;  read-hit fwd path
-
-
 Stage-3
 -------
 
@@ -82,7 +102,8 @@ Stage-3
 >> else, read-hit happens here. On miss, fills while stalling the prev pipes. dmem read doesn't
    happen in MEM2 because of routing congestion and synth issues.
 
->> evict/fills will use moore machines directly from dcu2; since they connect to the miu
+>> evict/fills will use moore machines directly from dcu2; since they connect to the miu.
+   NOTE: the dirty ff is present in this stage, as the prev ones don't need it at all.
 
 >> on a fault here, updates dcu2's exc and unsets pending_req and asserts stall for one more
    cycle. In the next posedge, the exc is processed.
@@ -90,18 +111,9 @@ Stage-3
 >> regardless of hit or miss, the last norm write will have stall de-asserted (if no RAW);
    for hits, this happens at the posedge right after reaching stage-3
 
->> update the plru; fwd-ing isn't worth it.
-
-
-Paths:
-======
-
-T(dmem-read) + T(read-mask comb) + T(EX-fwd-mux + routing delay) + 
-T(EX-fwd cmp) ___________________|
-
-T(write-mask comb) + Tsu(dmem-write)
-
-;  burst-fill logic undecided yet...
+>> update the plru; fwd-ing isn't worth it. This means plru victim sel *can* lag by 1 if the
+   least recently used elm is accessed by I2; I1's victim stays the same then. This is just
+   too rare to warrant fwd-ing.
 
 
 
@@ -128,18 +140,21 @@ Ld-use
 >> 2 cycle penalty; fwd from dcu2 in MEM3 to EX's mux.
 
 
-Stale-tag
-=========
+Stale-tag/dirty
+===============
 
 # Assume I2 arrived before I1
 
-* I1 is supposed to hit,  I2 misses, and I1's way is the victim, I1 reads stale hit in MEM2
-* I1 is supposed to miss, I2 is a write-miss, I1 has no clue of the dirty bit when it reaches
-  MEM2; overwrites I2's fetched data
+* I1 is supposed to hit,  I2 misses and evicts, and I1's way is the victim, I1 reads stale hit in MEM2
+  (stale tag)
+
+* I1 is supposed to miss, I2 is a write-miss or even a write-hit, I1 has no clue of the dirty bit when it
+  reaches MEM2; overwrites I2's fetched/written data
+  (dirty is 0 for I1 while 1 in reality)
 
 >> Stall MEM1 if MEM2 misses, until the fill/evict is complete. Minimal hardware
    cost, and the extra 1 cycle latency is manageable given how misses are rare, and fill/evict
-   latency dominates. The only caveat is when there is a tlb miss in MEM1; then, a ptw walk which
-   could have been parallelized is turned serial.
+   latency dominates (main reason...). The only caveat is when there is a tlb miss in MEM1; then, a ptw-walk
+   which could have been parallelized is turned serial.
 
 >> In the future, I'm hoping to add store buffs and eventually move on to non-blocking caches.
