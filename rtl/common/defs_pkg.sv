@@ -114,10 +114,7 @@ package defs_pkg;
 
 
     typedef struct packed {
-        logic [63:0] pc;
         logic [4:0]  rd;
-        logic [4:0]  rs1_a;
-        logic [4:0]  rs2_a;
         logic [63:0] data; // or csr_old_data
         logic [63:0] csr_new_data;
         logic [11:0] csr_addr;

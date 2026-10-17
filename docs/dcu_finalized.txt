@@ -1,7 +1,6 @@
 // Refer 7/10/26's commit to view the first draft
 
 
-
 # TO TRY (ASIC FLOW)
 ====================
 >> Check Tsu viols in (offset_from_alu => cache_tag_sram)
@@ -12,44 +11,56 @@
 
 1. Store valid and dirty in the tag
 
-Do not add write masks. The only cases which write-masks facilitate is when dirty has to change
-from 0 to 1, which could be done with RMW. Setting a new tag after a fill can have the valid and
-dirty bits hardwired to 10 respectively. Since we only have a single core, and isn't ooo, AND since
-we have ASIDs, the only actual case where data needs flushing would be in a JIT case; code in the
-dcache must move to the icache to exec.
-Which is rare, so I can either:
+mem1 reads tag+v+d from tag_sram. Since misses stall, I don't need simultaneous R/W access for
+tag as well as valid. The only RW issue is with dirty; on the first write to a fetched line.
 
-(i) Write valid, dirty as 00 and tag as garbage (which means flushing removes the data from the
-cache itself after eviction, aka assumes you wouldn't be needing it)
+Two choices:
 
-(ii) RMW to preserve valid=1 and tag (2 cycle latency added to the eviction latency; compare this
-with evicts to say the L2 cache and if this extra latency is negligible)
+(a) Detect V=1 && D=0 && is_w in mem2 and stall mem1. tag_sram is 1RW.
 
-The only edge case I think I need to bother about is I2<w, hit, !dirty> and I1<going to miss,
-victim unfortunately gets chosen as I2's, at which point I suppose I need a comparator between
-mem2 and mem3 to get the new dirty value; new_dirty = old_dirty || (victim_matches && mem3.dirty)
+(b) Make tag_sram 1R1W, add a fwd-ing path exclusively for dirty from mem3. Let read/write
+    happen simultaneously.
+
+    The only fwd case I think I need to bother about is:
+    
+    I2<w, hit, !dirty> and I1<going to miss, victim gets chosen as I2's>,
+    
+    at which point I need a comparator between mem2 and mem3 to get the new dirty value.
+    I1<w, hit, !dirty> doesn't need fwd-ing, but still we'll include that path so we can
+    simplify the logic and remove the comparator (the only tradeof is power, which is
+    negligible).
+
+
+Note: don't add write masks, since we'll anyways be reading the tag+v for every instr, and
+      miss-stall ensures they won't go stale, I can just combine that with the required new
+      data and just wb (a simplified RMW).
 
 
 2.
 Use DFFs. Fear of routing issues, fear of lavishness (area/cost).
 
 
+3.
+Dirty stored as DFFs while valid stored in tag_sram. Dirty will be 1RW. Cost; 256 cycles on
+boot as well as area/routing cost.
+
+
 
 Stage-1
 -------
 
->> (offset, valid) is fwd-ed from EX to dcache, while the latched
-   ones go to the tlb (not planning to keep the ff inside the tlb since
-   I might reuse the same tlb for IFU too at which point PC is implicitly
-   the input latch ff).
+>> (offset, valid) is fwd-ed from EX to dcache (tag_sram), while the latched ones
+   go to the tlb (not planning to keep the ff inside the tlb since I might reuse
+   the same tlb module for IFU too at which point PC is implicitly the input latch ff).
 
 >> the dcache reads cache's tag_mem, while the tlb translates addr,
-   iff valid is set (valid => .valid && !.exc.valid).
-   NEW: the tag mem now includes
+   iff instr.valid is set (valid => .valid && !.exc.valid).
 
->> valid_ffs is also read (8B net)
+>> tlb misses are handled here; stall for ex and flush for dcu1. On a miss, the pte
+   is fetched, written on the next cycle and then 
 
->> tlb misses are handled here; stall for ex and flush for dcu1
+>> stalls disable r_en for tag_sram to save power (how much power *does* it save at all?
+   No metrics...)
 
 >> dcu1 ff <= ppn, vpn, offset, w_en, valid, valid_meta, all tag ways for the set,
               wdata, wmask, exc, ... (pc, wb, csr, all of those)
@@ -66,15 +77,17 @@ Stage-2
    (reduces ld use haz penalty from 3 to 2).
 
    The compiler can't confidently reorder independent instrs before the mem op
-   since I lack an ROB while also needing precise exceptions
+   since I lack an ROB while also needing precise exceptions; if the compiler
+   inserts newer instrs to execute 
+
+   Since mem ops aren't allowed to happen in the bg, the only places where re-ordering is
+   going to help will be hiding ld use haz; RAW can only be re-ordered in such a way that no
+   speculative instr which can WB comes ahead of its time.
 
 >> Writes will only happen at the posedge right after stage-3; write-masking forms a
-   crit path otherwise. Besides, the only hazard is RAW, which is uncommon; I'm just
-   going to stall for this. I'm going to have an address cmp between dcu1 and
-   dcu2 which asserts stall on stage-2
+   crit path otherwise.
 
->> exc from the previous stage (ptw access fault; note that the ptw isn't
-   going to raise page fault, that's the tlb's job) is passed down, or the new
+>> exc from the previous stage (tlb/ptw page/access fault) is passed down, or the new
    exc from tlb page fault is passed
 
 >> the plru calcs the victim way.
@@ -99,8 +112,23 @@ Stage-3
 
 >> dcache is only going to have [in: valid, out: ready], no "busy" sig.
 
->> else, read-hit happens here. On miss, fills while stalling the prev pipes. dmem read doesn't
-   happen in MEM2 because of routing congestion and synth issues.
+>> else, read-hit happens here. On miss, fills while stalling the prev pipes.
+
+   Two possibilies:
+
+   (a) data_sram is accessed using set_idx to get all ways in MEM2. Then, I'm going to mux the
+       right way using the hit_way; I'm not sure *where*, either in MEM2 itself or in MEM3.
+       How do I even know intuitively how to make such choices?
+    
+    (b) data_sram is accessed using way_idx to get only the 64b right way. But the sram_read
+        plus read-mask *could* potentially form a crit path. I'm unsure of the clk-to-q time
+        of typical sram macros in sky130, as well as the shape of the read-mask applicatino.
+        Might need a check in librelane later... Which means for every decision I must run a
+        tiny asic flow (of say the macro or the mask combinational circ individually)? No
+        intuition there? Oh, and then there is Tsu of mem_wb ff.
+
+   I'm also confused about the number of ways I must have for dcache; 8, or 4? I'm going
+   to have 4 for icache.
 
 >> evict/fills will use moore machines directly from dcu2; since they connect to the miu.
    NOTE: the dirty ff is present in this stage, as the prev ones don't need it at all.
@@ -112,8 +140,8 @@ Stage-3
    for hits, this happens at the posedge right after reaching stage-3
 
 >> update the plru; fwd-ing isn't worth it. This means plru victim sel *can* lag by 1 if the
-   least recently used elm is accessed by I2; I1's victim stays the same then. This is just
-   too rare to warrant fwd-ing.
+   pseudo-least recently used elm is accessed by I2; I1's victim stays the same then. This is
+   just too rare to warrant fwd-ing.
 
 
 
@@ -124,11 +152,20 @@ RAW
 ===
 * sto followed immediately by a ld to the same cache line (64B); quite common
 
-* stall with (MEM3.addr == MEM2.addr and MEM3.w_en and MEM2.r_en)
-
 * Yes, without fwd-ing the IPC might get hit bad, but fwd-ing only works if
   the data being read is a subset of that being written; else there must anyways
   be an SRAM read, a struct haz. The ROI of this feels poor...
+
+Some strategies:
+
+1. stall with (MEM3.addr == MEM2.addr and MEM3.w_en and MEM2.r_en). Potentially
+   bad IPC; don't know about the stats of cases where the cache line is accessed
+   consecutively
+
+2. fwd the whole 512b cache-line and mux it with data_sram's r_data. But dcu2 changes
+   in the same cycle; which means I would need to latch the data; wait, do sram macros
+   have internal ffs to latch the data, aka must I hold the w_data stable for the entire
+   cycle while the write is happening?
 
 
 
@@ -158,3 +195,65 @@ Stale-tag/dirty
    which could have been parallelized is turned serial.
 
 >> In the future, I'm hoping to add store buffs and eventually move on to non-blocking caches.
+
+
+
+Flushing
+========
+
+Since we only have a single core, and isn't ooo, AND since we have ASIDs, the only actual case
+where data needs flushing would be in a JIT case; code in the dcache must move to the icache to
+exec.
+
+Which is rare, so I can either:
+
+(i) Remove the data from the cache after eviction
+
+(ii) RMW to preserve valid=1 and tag (2 cycle latency added to the eviction latency; compare this
+with evicts to say the L2 cache and if this extra latency is absorbed or if eviction isn't slow
+enough to absorb it)
+
+
+
+PTW
+===
+
+The ptw connects directly to the dcache. Other possibilities I considered along with reasons for
+ditching each (PTW-to-DCache seemed too complex, hence why I even considered these options):
+
+
+1. PTW-to-L2
+-------------
+
+Lack of guarantees for fence instruction following these particular pte modifications:
+
+<list them here>
+
+
+Also, fear of bloating area with this layer.
+
+
+2. PWC
+------
+
+Two choices that I had were:
+
+(a) Add a small 4/8-entry CAM just for superpages (Giga or even Mega); which means I cut PPN read
+latency by 66%. But the final one is still a RAM (or L2) read.
+
+(b) Either keep the CAM or maybe it to a set-assoc cache of say 16/32 entries and store the pte entries
+    too. But mixing superpages and normal pages in set-assoc is hard, so I would've either go fully
+    assoc (at which point I waste space on a mask (for the required VPN)) or instantiate set assoc for
+    norm and fully assoc for super and parallely query them and mux the hits. Adds significant logic
+    and area to the module.
+
+Either choice adds a small invalidation cost to the ptw on fence (which can run parallely unless another
+ptw request appears). "Invalidation" because there is nothing to WB.
+
+Plus, the coherence issue lingers, and flushes are expensive; costs as many cycles as there are ways in
+our dcache.
+
+
+
+The main issue that PTW-to-DCache solves is of course coherence, at the cost of D&V complexity. Unsure
+about the gate/routing complexity, but we'll see that shortly.
